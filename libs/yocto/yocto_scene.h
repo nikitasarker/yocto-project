@@ -88,6 +88,9 @@ struct camera_data {
   float   aspect       = 1.500f;
   float   focus        = 10000;
   float   aperture     = 0;
+  // add extra stuff to camera_data
+  float fov = 40.0f;
+  
 };
 
 // Texture data as array of float or byte pixels. Textures can be stored in

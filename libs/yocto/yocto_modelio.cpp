@@ -2517,8 +2517,8 @@ bool save_stl(
         auto  fnormal  = !shape.fnormals.empty()
                              ? shape.fnormals[triangle_idx]
                              : triangle_normal(shape.positions[triangle[0]],
-                                 shape.positions[triangle[1]],
-                                 shape.positions[triangle[2]]);
+                                   shape.positions[triangle[1]],
+                                   shape.positions[triangle[2]]);
         write_value(buffer, fnormal);
         write_value(buffer, shape.positions[triangle[0]]);
         write_value(buffer, shape.positions[triangle[1]]);
@@ -2542,8 +2542,8 @@ bool save_stl(
         auto  fnormal  = !shape.fnormals.empty()
                              ? shape.fnormals[triangle_idx]
                              : triangle_normal(shape.positions[triangle[0]],
-                                 shape.positions[triangle[1]],
-                                 shape.positions[triangle[2]]);
+                                   shape.positions[triangle[1]],
+                                   shape.positions[triangle[2]]);
         format_values(buffer, "facet normal {}\n", fnormal);
         format_values(buffer, "outer loop\n");
         format_values(buffer, "vertex {}\n", shape.positions[triangle[0]]);
@@ -4062,11 +4062,11 @@ static void make_quad(vector<array<int, 3>>& triangles,
     plight.area_emission = {plight.emission[0] * dscale,
         plight.emission[1] * dscale, plight.emission[2] * dscale};
     plight.area_frame    = flatten(mul(unflatten(plight.frame),
-        lookat_frame(mul(normalize(sub(plight.from, plight.to)), distant_dist),
-            {0, 0, 0}, {0, 1, 0}, true)));
+           lookat_frame(mul(normalize(sub(plight.from, plight.to)), distant_dist),
+               {0, 0, 0}, {0, 1, 0}, true)));
     plight.area_frend    = flatten(mul(unflatten(plight.frend),
-        lookat_frame(mul(normalize(sub(plight.from, plight.to)), distant_dist),
-            {0, 0, 0}, {0, 1, 0}, true)));
+           lookat_frame(mul(normalize(sub(plight.from, plight.to)), distant_dist),
+               {0, 0, 0}, {0, 1, 0}, true)));
     auto texcoords       = vector<array<float, 2>>{};
     make_quad(plight.area_triangles, plight.area_positions, plight.area_normals,
         texcoords, {4, 2}, size);
@@ -4080,7 +4080,7 @@ static void make_quad(vector<array<int, 3>>& triangles,
     get_pbrt_value(command.values, "from", plight.from);
     plight.area_emission = plight.emission;
     plight.area_frame    = flatten(
-        mul(unflatten(plight.frame), translation_frame(plight.from)));
+           mul(unflatten(plight.frame), translation_frame(plight.from)));
     plight.area_frend = flatten(
         mul(unflatten(plight.frend), translation_frame(plight.from)));
     auto texcoords = vector<array<float, 2>>{};

@@ -198,8 +198,62 @@ void run_render(const render_params& params_) {
     tesselate_subdivs(scene);
   }
 
+  // convert hair "lines" to cylinders
+  // for (auto instance : scene.instances) {
+  //   if (scene.material_names[instance.material] == "hair" &&
+  //       !scene.shapes[instance.shape].lines.empty()) {
+  //     printf("instance.material: %d\n", instance.material);
+  //     printf("instance.shape: %d\n", instance.shape);
+  //     printf("shape: %s\n", scene.shape_names[instance.shape].c_str());
+  //     printf(
+  //         "shape lines size: %ld\n",
+  //         scene.shapes[instance.shape].lines.size());
+  //     auto cylinder_shape = lines_to_cylinders(
+  //         scene.shapes[instance.shape].lines,
+  //         scene.shapes[instance.shape].positions, 4,
+  //         scene.shapes[instance.shape].radius[0]);
+  //     scene.shapes[instance.shape] = cylinder_shape;
+  //   }
+  // }
+
   // build bvh
   auto bvh = make_bvh(scene, params);
+
+  printf("bvh nodes size: %ld\n", bvh.nodes.size());
+  printf("bvh primitives size: %ld\n", bvh.primitives.size());
+  printf("bvh shapes size: %ld\n", bvh.shapes.size());
+  for (auto node : bvh.nodes) {
+    printf("\n\nnode start: %d\n", node.start);
+    printf("node num: %d\n", node.num);
+    if (node.internal) {
+      printf("internal node\n");
+    } else {
+      printf("external node\n");
+    }
+    printf("node bbox min: %f, %f, %f\n", node.bbox.min.x, node.bbox.min.y,
+        node.bbox.min.z);
+    printf("node bbox max: %f, %f, %f\n", node.bbox.max.x, node.bbox.max.y,
+        node.bbox.max.z);
+    for (auto idx = node.start; idx < node.start + node.num; idx++) {
+      printf("\n======idx: %d\n", idx);
+      auto& instance_ = scene.instances[bvh.primitives[idx]];
+      printf("bvh.shapes[instance_.shape].nodes size: %ld\n",
+          bvh.shapes[instance_.shape].nodes.size());
+      // for (auto n : bvh.shapes[instance_.shape].nodes) {
+      //   printf("node start: %d\n", n.start);
+      //   printf("node num: %d\n", n.num);
+      //   if (n.internal) {
+      //     printf("internal node\n");
+      //   } else {
+      //     printf("external node\n");
+      //   }
+      //   printf("node bbox min: %f, %f, %f\n", n.bbox.min.x, n.bbox.min.y,
+      //       n.bbox.min.z);
+      //   printf("node bbox max: %f, %f, %f\n", n.bbox.max.x, n.bbox.max.y,
+      //       n.bbox.max.z);
+      // }
+    }
+  }
 
   // init renderer
   auto lights = make_lights(scene, params);
@@ -237,6 +291,14 @@ void run_render(const render_params& params_) {
   // save image
   timer      = simple_timer{};
   auto image = params.denoise ? get_denoised(state) : get_render(state);
+  // for(int pixel=0; pixel<image.pixels.size(); pixel++) {
+  //   if(pixel%720>400 && pixel%720<405 && pixel/720>400 && pixel/720<405){
+  //     printf("pixel: %f, %f, %f, %f", image.pixels[pixel][0],
+  //     image.pixels[pixel][1], image.pixels[pixel][2],
+  //     image.pixels[pixel][3]);
+  //   }
+  // }
+
   if (!is_hdr_filename(params.output))
     image = tonemap_image(image, params.exposure, params.filmic);
   save_image(params.output, image);

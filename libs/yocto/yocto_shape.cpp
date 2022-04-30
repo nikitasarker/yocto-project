@@ -1409,7 +1409,7 @@ shape_data polyline_to_cylinders(
   for (auto idx = 0; idx < (int)vertices.size() - 1; idx++) {
     auto cylinder = make_uvcylinder({steps, 1, 1}, {scale, 1}, {1, 1, 1});
     auto frame    = frame_fromz((vertices[idx] + vertices[idx + 1]) / 2,
-        vertices[idx] - vertices[idx + 1]);
+           vertices[idx] - vertices[idx + 1]);
     auto length   = distance(vertices[idx], vertices[idx + 1]);
     for (auto& position : cylinder.positions)
       position = transform_point(frame, position * vec3f{1, 1, length / 2});
@@ -1425,7 +1425,7 @@ shape_data lines_to_cylinders(
   for (auto idx = 0; idx < (int)vertices.size(); idx += 2) {
     auto cylinder = make_uvcylinder({steps, 1, 1}, {scale, 1}, {1, 1, 1});
     auto frame    = frame_fromz((vertices[idx + 0] + vertices[idx + 1]) / 2,
-        vertices[idx + 0] - vertices[idx + 1]);
+           vertices[idx + 0] - vertices[idx + 1]);
     auto length   = distance(vertices[idx + 0], vertices[idx + 1]);
     for (auto& position : cylinder.positions)
       position = transform_point(frame, position * vec3f{1, 1, length / 2});
@@ -1441,7 +1441,7 @@ shape_data lines_to_cylinders(const vector<vec2i>& lines,
   for (auto& line : lines) {
     auto cylinder = make_uvcylinder({steps, 1, 1}, {scale, 1}, {1, 1, 1});
     auto frame    = frame_fromz((positions[line.x] + positions[line.y]) / 2,
-        positions[line.x] - positions[line.y]);
+           positions[line.x] - positions[line.y]);
     auto length   = distance(positions[line.x], positions[line.y]);
     for (auto& position : cylinder.positions)
       position = transform_point(frame, position * vec3f{1, 1, length / 2});
@@ -2219,8 +2219,8 @@ void update_triangles_bvh(bvh_tree& bvh, const vector<vec3i>& triangles,
   // update nodes
   update_bvh(bvh, bboxes);
 }
-void update_quads_bvh(bvh_tree& bvh, const vector<vec4i>& quads,
-    const vector<vec3f>& positions) {
+void update_quads_bvh(
+    bvh_tree& bvh, const vector<vec4i>& quads, const vector<vec3f>& positions) {
   // build primitives
   auto bboxes = vector<bbox3f>(quads.size());
   for (auto idx = 0; idx < bboxes.size(); idx++) {
@@ -2302,14 +2302,14 @@ shape_intersection intersect_points_bvh(const bvh_tree& bvh,
     const vector<float>& radius, const ray3f& ray, bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = intersect_elements_bvh(
-      bvh,
-      [&points, &positions, &radius](
+       bvh,
+       [&points, &positions, &radius](
           int idx, const ray3f& ray, vec2f& uv, float& distance) {
         auto& p = points[idx];
         return intersect_point(ray, positions[p], radius[p], uv, distance);
-      },
-      ray, intersection.element, intersection.uv, intersection.distance,
-      find_any);
+       },
+       ray, intersection.element, intersection.uv, intersection.distance,
+       find_any);
   return intersection;
 }
 shape_intersection intersect_lines_bvh(const bvh_tree& bvh,
@@ -2317,15 +2317,15 @@ shape_intersection intersect_lines_bvh(const bvh_tree& bvh,
     const vector<float>& radius, const ray3f& ray, bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = intersect_elements_bvh(
-      bvh,
-      [&lines, &positions, &radius](
+       bvh,
+       [&lines, &positions, &radius](
           int idx, const ray3f& ray, vec2f& uv, float& distance) {
         auto& l = lines[idx];
         return intersect_line(ray, positions[l.x], positions[l.y], radius[l.x],
-            radius[l.y], uv, distance);
-      },
-      ray, intersection.element, intersection.uv, intersection.distance,
-      find_any);
+             radius[l.y], uv, distance, false);
+       },
+       ray, intersection.element, intersection.uv, intersection.distance,
+       find_any);
   return intersection;
 }
 shape_intersection intersect_triangles_bvh(const bvh_tree& bvh,
@@ -2333,15 +2333,15 @@ shape_intersection intersect_triangles_bvh(const bvh_tree& bvh,
     const ray3f& ray, bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = intersect_elements_bvh(
-      bvh,
-      [&triangles, &positions](
+       bvh,
+       [&triangles, &positions](
           int idx, const ray3f& ray, vec2f& uv, float& distance) {
         auto& t = triangles[idx];
         return intersect_triangle(
-            ray, positions[t.x], positions[t.y], positions[t.z], uv, distance);
-      },
-      ray, intersection.element, intersection.uv, intersection.distance,
-      find_any);
+             ray, positions[t.x], positions[t.y], positions[t.z], uv, distance);
+       },
+       ray, intersection.element, intersection.uv, intersection.distance,
+       find_any);
   return intersection;
 }
 shape_intersection intersect_quads_bvh(const bvh_tree& bvh,
@@ -2349,23 +2349,23 @@ shape_intersection intersect_quads_bvh(const bvh_tree& bvh,
     const ray3f& ray, bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = intersect_elements_bvh(
-      bvh,
-      [&quads, &positions](
+       bvh,
+       [&quads, &positions](
           int idx, const ray3f& ray, vec2f& uv, float& distance) {
         auto& t = quads[idx];
         return intersect_quad(ray, positions[t.x], positions[t.y],
-            positions[t.z], positions[t.w], uv, distance);
-      },
-      ray, intersection.element, intersection.uv, intersection.distance,
-      find_any);
+             positions[t.z], positions[t.w], uv, distance);
+       },
+       ray, intersection.element, intersection.uv, intersection.distance,
+       find_any);
   return intersection;
 }
 
 // Intersect ray with a bvh.
 template <typename Overlap>
-static bool overlap_elements_bvh(const bvh_tree& bvh,
-    Overlap&& overlap_element, const vec3f& pos, float max_distance,
-    int& element, vec2f& uv, float& distance, bool find_any) {
+static bool overlap_elements_bvh(const bvh_tree& bvh, Overlap&& overlap_element,
+    const vec3f& pos, float max_distance, int& element, vec2f& uv,
+    float& distance, bool find_any) {
   // check if empty
   if (bvh.nodes.empty()) return false;
 
@@ -2419,15 +2419,15 @@ shape_intersection overlap_points_bvh(const bvh_tree& bvh,
     bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = overlap_elements_bvh(
-      bvh,
-      [&points, &positions, &radius](int idx, const vec3f& pos,
+       bvh,
+       [&points, &positions, &radius](int idx, const vec3f& pos,
           float max_distance, vec2f& uv, float& distance) {
         auto& p = points[idx];
         return overlap_point(
-            pos, max_distance, positions[p], radius[p], uv, distance);
-      },
-      pos, max_distance, intersection.element, intersection.uv,
-      intersection.distance, find_any);
+             pos, max_distance, positions[p], radius[p], uv, distance);
+       },
+       pos, max_distance, intersection.element, intersection.uv,
+       intersection.distance, find_any);
   return intersection;
 }
 shape_intersection overlap_lines_bvh(const bvh_tree& bvh,
@@ -2436,15 +2436,15 @@ shape_intersection overlap_lines_bvh(const bvh_tree& bvh,
     bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = overlap_elements_bvh(
-      bvh,
-      [&lines, &positions, &radius](int idx, const vec3f& pos,
+       bvh,
+       [&lines, &positions, &radius](int idx, const vec3f& pos,
           float max_distance, vec2f& uv, float& distance) {
         auto& l = lines[idx];
         return overlap_line(pos, max_distance, positions[l.x], positions[l.y],
-            radius[l.x], radius[l.y], uv, distance);
-      },
-      pos, max_distance, intersection.element, intersection.uv,
-      intersection.distance, find_any);
+             radius[l.x], radius[l.y], uv, distance);
+       },
+       pos, max_distance, intersection.element, intersection.uv,
+       intersection.distance, find_any);
   return intersection;
 }
 shape_intersection overlap_triangles_bvh(const bvh_tree& bvh,
@@ -2453,16 +2453,16 @@ shape_intersection overlap_triangles_bvh(const bvh_tree& bvh,
     bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = overlap_elements_bvh(
-      bvh,
-      [&triangles, &positions, &radius](int idx, const vec3f& pos,
+       bvh,
+       [&triangles, &positions, &radius](int idx, const vec3f& pos,
           float max_distance, vec2f& uv, float& distance) {
         auto& t = triangles[idx];
         return overlap_triangle(pos, max_distance, positions[t.x],
-            positions[t.y], positions[t.z], radius[t.x], radius[t.y],
-            radius[t.z], uv, distance);
-      },
-      pos, max_distance, intersection.element, intersection.uv,
-      intersection.distance, find_any);
+             positions[t.y], positions[t.z], radius[t.x], radius[t.y],
+             radius[t.z], uv, distance);
+       },
+       pos, max_distance, intersection.element, intersection.uv,
+       intersection.distance, find_any);
   return intersection;
 }
 shape_intersection overlap_quads_bvh(const bvh_tree& bvh,
@@ -2471,16 +2471,16 @@ shape_intersection overlap_quads_bvh(const bvh_tree& bvh,
     bool find_any) {
   auto intersection = shape_intersection{};
   intersection.hit  = overlap_elements_bvh(
-      bvh,
-      [&quads, &positions, &radius](int idx, const vec3f& pos,
+       bvh,
+       [&quads, &positions, &radius](int idx, const vec3f& pos,
           float max_distance, vec2f& uv, float& distance) {
         auto& q = quads[idx];
         return overlap_quad(pos, max_distance, positions[q.x], positions[q.y],
-            positions[q.z], positions[q.w], radius[q.x], radius[q.y],
-            radius[q.z], radius[q.w], uv, distance);
-      },
-      pos, max_distance, intersection.element, intersection.uv,
-      intersection.distance, find_any);
+             positions[q.z], positions[q.w], radius[q.x], radius[q.y],
+             radius[q.z], radius[q.w], uv, distance);
+       },
+       pos, max_distance, intersection.element, intersection.uv,
+       intersection.distance, find_any);
   return intersection;
 }
 
@@ -3202,7 +3202,7 @@ vector<float> sample_quads_cdf(
   for (auto i = 0; i < cdf.size(); i++) {
     auto& q = quads[i];
     auto  w = quad_area(
-        positions[q.x], positions[q.y], positions[q.z], positions[q.w]);
+         positions[q.x], positions[q.y], positions[q.z], positions[q.w]);
     cdf[i] = w + (i ? cdf[i - 1] : 0);
   }
   return cdf;
@@ -3212,7 +3212,7 @@ void sample_quads_cdf(vector<float>& cdf, const vector<vec4i>& quads,
   for (auto i = 0; i < cdf.size(); i++) {
     auto& q = quads[i];
     auto  w = quad_area(
-        positions[q.x], positions[q.y], positions[q.z], positions[q.w]);
+         positions[q.x], positions[q.y], positions[q.z], positions[q.w]);
     cdf[i] = w + (i ? cdf[i - 1] : 0);
   }
 }
@@ -4198,7 +4198,7 @@ void polyline_to_cylinders(vector<vec4i>& quads, vector<vec3f>& positions,
       cylinder_texcoords, {steps, 1, 1}, {scale, 1}, {1, 1, 1});
   for (auto idx = 0; idx < (int)vertices.size() - 1; idx++) {
     auto frame  = frame_fromz((vertices[idx] + vertices[idx + 1]) / 2,
-        vertices[idx] - vertices[idx + 1]);
+         vertices[idx] - vertices[idx + 1]);
     auto length = distance(vertices[idx], vertices[idx + 1]);
     auto transformed_positions = cylinder_positions;
     auto transformed_normals   = cylinder_normals;
@@ -4222,7 +4222,7 @@ void lines_to_cylinders(vector<vec4i>& quads, vector<vec3f>& positions,
       cylinder_texcoords, {steps, 1, 1}, {scale, 1}, {1, 1, 1});
   for (auto idx = 0; idx < (int)vertices.size(); idx += 2) {
     auto frame  = frame_fromz((vertices[idx + 0] + vertices[idx + 1]) / 2,
-        vertices[idx + 0] - vertices[idx + 1]);
+         vertices[idx + 0] - vertices[idx + 1]);
     auto length = distance(vertices[idx + 0], vertices[idx + 1]);
     auto transformed_positions = cylinder_positions;
     auto transformed_normals   = cylinder_normals;
@@ -4247,7 +4247,7 @@ void lines_to_cylinders(vector<vec4i>& quads, vector<vec3f>& positions,
       cylinder_texcoords, {steps, 1, 1}, {scale, 1}, {1, 1, 1});
   for (auto& line : lines) {
     auto frame  = frame_fromz((vertices[line.x] + vertices[line.y]) / 2,
-        vertices[line.x] - vertices[line.y]);
+         vertices[line.x] - vertices[line.y]);
     auto length = distance(vertices[line.x], vertices[line.y]);
     auto transformed_positions = cylinder_positions;
     auto transformed_normals   = cylinder_normals;

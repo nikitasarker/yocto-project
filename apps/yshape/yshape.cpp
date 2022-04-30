@@ -362,6 +362,16 @@ struct hair_params {
   float  radius  = 0.0001f;
 };
 
+// hair params from italian homework
+// struct hair_params {
+//   int   num      = 100000;
+//   int   steps    = 1;
+//   float lenght   = 0.02f;
+//   float scale    = 250;
+//   float strength = 0.01f;
+//   float gravity  = 0.0f;
+// };
+
 void add_options(cli_command& cli, hair_params& params) {
   add_option(cli, "shape", params.shape, "input shape");
   add_option(cli, "output", params.output, "output shape");

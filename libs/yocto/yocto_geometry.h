@@ -139,6 +139,22 @@ inline vec3f ray_point(const ray3f& ray, float t);
 }  // namespace yocto
 
 // -----------------------------------------------------------------------------
+// CONES
+// -----------------------------------------------------------------------------
+namespace yocto {
+
+struct cone_data {
+  vec3f origin = {0, 0, 0};
+  vec3f dir    = {0, 0, 1};
+  float spread;
+
+  float tmin = ray_eps;
+  float tmax = flt_max;
+};
+
+}  // namespace yocto
+
+// -----------------------------------------------------------------------------
 // TRANSFORMS
 // -----------------------------------------------------------------------------
 namespace yocto {
@@ -277,9 +293,17 @@ namespace yocto {
 inline bool intersect_point(
     const ray3f& ray, const vec3f& p, float r, vec2f& uv, float& dist);
 
+// Intersect a ray with infinite cylinder
+inline bool intersect_infinite_cylinder(const ray3f& ray, const vec3f& p0,
+    const vec3f& p1, float radius, vec3f axis, float* inD, float* outD);
+
+// Intersect a ray with cylinder
+inline bool intersect_cylinder(const ray3f& ray, const vec3f& p0,
+    const vec3f& p1, float r0, float r1, vec2f& uv, float& dist);
+
 // Intersect a ray with a line
 inline bool intersect_line(const ray3f& ray, const vec3f& p0, const vec3f& p1,
-    float r0, float r1, vec2f& uv, float& dist);
+    float r0, float r1, vec2f& uv, float& dist, bool printing);
 
 // Intersect a ray with a triangle
 inline bool intersect_triangle(const ray3f& ray, const vec3f& p0,
@@ -295,6 +319,17 @@ inline bool intersect_bbox(const ray3f& ray, const bbox3f& bbox);
 // Intersect a ray with a axis-aligned bounding box
 inline bool intersect_bbox(
     const ray3f& ray, const vec3f& ray_dinv, const bbox3f& bbox);
+
+}  // namespace yocto
+
+// -----------------------------------------------------------------------------
+// RAY-PRIMITIVE INTERSECTION FUNCTIONS
+// -----------------------------------------------------------------------------
+namespace yocto {
+
+// Intersect a ray with a axis-aligned bounding box
+inline bool cone_intersect_bbox(
+    const cone_data& cone, const bbox3f& bbox, bool printing);
 
 }  // namespace yocto
 
@@ -700,9 +735,186 @@ inline bool intersect_point(
   return true;
 }
 
+// ========= my extension =========
+// Intersect a ray with infinite cylinder
+inline bool intersect_infinite_cylinder(const ray3f& ray, const vec3f& p0,
+    const vec3f& p1, float radius, vec3f axis, float* inD, float* outD) {
+  // subtract cylinder centre from ray origin, to translate problem at (0,0,0).
+  vec3f r_c = ray.o - p0;
+
+  // get radius squared
+  float r_2 = radius * radius;
+
+  // get vector that is perpendicular to both the ray and cylinder axis
+  vec3f n = cross(ray.d, axis);
+
+  float ln = length(n);
+
+  // check if is parallel
+  if (equal(ln, 0.0f)) {
+    *inD  = -1.0e21f;
+    *outD = 1.0e21f;
+    return length(r_c - dot(r_c, axis) * axis) <= radius;
+  }
+  n = normalize(n);
+
+  float d = abs(dot(r_c, n));
+
+  if (d <= radius) {
+    vec3f O = cross(r_c, axis);
+
+    float t = -dot(O, n) / ln;
+
+    O = normalize(cross(n, axis));
+
+    float s = abs(sqrtf(r_2 - d * d) / dot(ray.d, O));
+
+    *inD  = t - s;
+    *outD = t + s;
+
+    return true;
+  }
+
+  return false;
+}
+
+// Intersect a ray with a cylinder
+inline bool intersect_cylinder(const ray3f& ray, const vec3f& p0,
+    const vec3f& p1, float r0, float r1, vec2f& uv, float& dist) {
+  printf("ray direction: %f, %f, %f\n", ray.d.x, ray.d.y, ray.d.z);
+  vec3f axis = normalize(p1 - p0);
+  vec3f normal, point;
+
+  float baseDistance = -dot(-axis, p0);
+  float topDistance  = -dot(axis, p1);
+
+  float dc, dw, t;
+  float inD, outD; /* Object  intersection dists.	*/
+  // 0 top, 1 side, 2 base
+  unsigned char sideIn;
+  unsigned char sideOut;
+
+  if (!intersect_infinite_cylinder(ray, p0, p1, r0, axis, &inD, &outD)) {
+    return false;
+  }
+
+  sideIn = sideOut = 1;
+
+  /*	Intersect the ray with the bottom end-cap plane.		*/
+
+  dc = dot(-axis, ray.d);
+  dw = dot(-axis, ray.o) + baseDistance;
+
+  if (dc == 0.0f) { /* If parallel to bottom plane	*/
+    if (dw >= 0.0f) {
+      return false;
+    }
+  } else {
+    t = -dw / dc;
+    if (dc >= 0.0f) { /* If far plane	*/
+      if (t > inD && t < outD) {
+        outD    = t;
+        sideOut = 2;
+      }
+      if (t < inD) {
+        return false;
+      }
+    } else { /* If near plane	*/
+      if (t > inD && t < outD) {
+        inD    = t;
+        sideIn = 2;
+      }
+      if (t > outD) {
+        return false;
+      }
+    }
+  }
+
+  // Intersect the ray with the top end-cap plane.
+
+  dc = dot(axis, ray.d);
+  dw = dot(axis, ray.o) + topDistance;
+
+  if (dc == 0.0f) { /* If parallel to top plane	*/
+    if (dw >= 0.0f) {
+      return false;
+    }
+  } else {
+    t = -dw / dc;
+    if (dc >= 0.0f) { /* If far plane	*/
+      if (t > inD && t < outD) {
+        outD    = t;
+        sideOut = 0;
+      }
+      if (t < inD) {
+        return false;
+      }
+    } else { /* If near plane	*/
+      if (t > inD && t < outD) {
+        inD    = t;
+        sideIn = 0;
+      }
+      if (t > outD) {
+        return false;
+      }
+    }
+  }
+
+  if (inD < 0 && outD < 0) return false;
+
+  bool          entering = true;
+  unsigned char side     = sideIn;
+  if (inD < outD && inD > 0) {
+    t     = inD;
+    point = ray.o + t * ray.d;
+
+  } else if (outD > 0) {
+    t = outD;
+
+    point = ray.o + t * ray.d;
+
+    side     = sideOut;
+    entering = false;
+
+  } else {
+    return false;
+  }
+
+  // INSERTED
+  // setup intersection params
+  auto u = ray.d;
+  auto v = p1 - p0;
+  auto w = ray.o - p0;
+
+  // compute values to solve a linear system
+  auto a   = dot(u, u);
+  auto b   = dot(u, v);
+  auto c   = dot(v, v);
+  auto d   = dot(u, w);
+  auto e   = dot(v, w);
+  auto det = a * c - b * b;
+
+  // compute Parameters on both ray and segment
+  auto t_ = (b * e - c * d) / det;
+  auto s  = (a * e - b * d) / det;
+
+  // exit if not within bounds
+  if (t_ < ray.tmin || t_ > ray.tmax) return false;
+
+  // clamp segment param to segment corners
+  s = clamp(s, (float)0, (float)1);
+
+  // intersection occurred: set params and exit
+  uv   = {s, 0};
+  dist = t;
+
+  return true;
+}
+// ========= my extension ends =========
+
 // Intersect a ray with a line
 inline bool intersect_line(const ray3f& ray, const vec3f& p0, const vec3f& p1,
-    float r0, float r1, vec2f& uv, float& dist) {
+    float r0, float r1, vec2f& uv, float& dist, bool printing) {
   // setup intersection params
   auto u = ray.d;
   auto v = p1 - p0;
@@ -725,6 +937,7 @@ inline bool intersect_line(const ray3f& ray, const vec3f& p0, const vec3f& p1,
   auto s = (a * e - b * d) / det;
 
   // exit if not within bounds
+
   if (t < ray.tmin || t > ray.tmax) return false;
 
   // clamp segment param to segment corners
@@ -741,7 +954,8 @@ inline bool intersect_line(const ray3f& ray, const vec3f& p0, const vec3f& p1,
   if (d2 > r * r) return {};
 
   // intersection occurred: set params and exit
-  uv   = {s, sqrt(d2) / r};
+  // uv   = {s, sqrt(d2) / r};
+  uv   = {s, 0};
   dist = t;
   return true;
 }
@@ -865,6 +1079,618 @@ inline bool intersect_bbox(
   auto t1     = min(min(tmax), ray.tmax);
   t1 *= 1.00000024f;  // for double: 1.0000000000000004
   return t0 <= t1;
+}
+
+}  // namespace yocto
+
+// -----------------------------------------------------------------------------
+// IMPLEMENRTATION OF CONE-PRIMITIVE INTERSECTION FUNCTIONS
+// -----------------------------------------------------------------------------
+namespace yocto {
+
+// Intersect a cone with a line (approximate)
+inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, float r0, float r1, vec2f& uv, float& dist) {
+  float N_CONE_POINTS    = 1.0;
+  float CONE_AREA_FACTOR = 0.2;
+
+  vec3f coneCircleV = cone.origin +
+                      cone.dir * (length((max(p0, p1) + r0) - cone.origin));
+
+  float coneCircleR = length(coneCircleV - cone.origin) * tanf(cone.spread);
+
+  // compute plane coordenate system
+  vec3f planeXAxis = normalize(cross(vec3f{0.0f, 0.0f, 1.0f}, -cone.dir));
+  vec3f planeYAxis = normalize(cross(-cone.dir, planeXAxis));
+
+  /*approximation through rays
+  Shoot rays inside the circle and estimate the area
+      _x_
+    x/   \x
+   x|  x  |x
+    x\_x_/x
+
+  */
+
+  int   nPoints = 0;
+  vec3f direction;
+
+  float minDistance = flt_max;
+  float t_dist      = -1;
+  auto  uv_average  = std::vector<vec2f>{};
+
+  vec3f point;
+  float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
+  phi *= phi;
+  float theta, r;
+  // float     theta;
+  // rng_state rng;
+
+  for (int i = 1; i <= N_CONE_POINTS; i++) {
+    if (i > N_CONE_POINTS) {
+      r = 1.0f;
+    } else {
+      r = sqrtf(i - 0.5f) / sqrtf(N_CONE_POINTS - 0.5f);
+    }
+
+    theta = 2.0f * pi * i / phi;
+
+    point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
+                              planeYAxis * coneCircleR * r * sin(theta));
+
+    direction = normalize(point - cone.origin);
+    if (intersect_line(
+            ray3f{cone.origin, direction}, p0, p1, r0, r1, uv, t_dist, false)) {
+      uv_average.push_back(uv);
+
+      if (minDistance > t_dist) {
+        minDistance = t_dist;
+      }
+
+      nPoints++;
+    }
+  }
+
+  float areaFraction = nPoints / N_CONE_POINTS;
+
+  if (areaFraction <= 0.3f) {
+    return false;
+  }
+
+  if (t_dist != -1) {
+    // intersection occurred: set params and exit
+    dist = t_dist;
+
+    // update area fraction
+    vec2f s = {0, 0};
+    for (auto u : uv_average) {
+      s += u;
+    }
+
+    uv = s / nPoints;
+
+    return true;
+  }
+
+  return false;
+}
+
+struct AABBPolygon {
+  unsigned char nPoints;
+  unsigned char point[6];
+
+  AABBPolygon(unsigned char type) {
+    // ---
+    if (type == 0) {
+      nPoints = 6;
+
+      point[0] = 1;
+      point[1] = 5;
+      point[2] = 4;
+      point[3] = 6;
+      point[4] = 2;
+      point[5] = 3;
+
+      // 0--
+    } else if (type == 1) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 2;
+      point[2] = 3;
+      point[3] = 1;
+      point[4] = 5;
+      point[5] = 4;
+
+      // +--
+    } else if (type == 2) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 2;
+      point[2] = 3;
+      point[3] = 7;
+      point[4] = 5;
+      point[5] = 4;
+
+      // -0-
+    } else if (type == 3) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 4;
+      point[2] = 6;
+      point[3] = 2;
+      point[4] = 3;
+      point[5] = 1;
+
+      // 00-
+    } else if (type == 4) {
+      nPoints = 4;
+
+      point[0] = 0;
+      point[1] = 2;
+      point[2] = 3;
+      point[3] = 1;
+
+      // +0-
+    } else if (type == 5) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 2;
+      point[2] = 3;
+      point[3] = 7;
+      point[4] = 5;
+      point[5] = 1;
+
+      // -+-
+    } else if (type == 6) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 4;
+      point[2] = 6;
+      point[3] = 7;
+      point[4] = 3;
+      point[5] = 1;
+
+      // 0+-
+    } else if (type == 7) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 2;
+      point[2] = 6;
+      point[3] = 7;
+      point[4] = 3;
+      point[5] = 1;
+
+      // ++-
+    } else if (type == 8) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 2;
+      point[2] = 6;
+      point[3] = 7;
+      point[4] = 5;
+      point[5] = 1;
+
+      // --0
+    } else if (type == 9) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 1;
+      point[2] = 5;
+      point[3] = 4;
+      point[4] = 6;
+      point[5] = 2;
+
+      // 0-0
+    } else if (type == 10) {
+      nPoints = 4;
+
+      point[0] = 0;
+      point[1] = 1;
+      point[2] = 5;
+      point[3] = 4;
+
+      // +-0
+    } else if (type == 11) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 1;
+      point[2] = 3;
+      point[3] = 7;
+      point[4] = 5;
+      point[5] = 4;
+
+      // -00
+    } else if (type == 12) {
+      nPoints = 4;
+
+      point[0] = 0;
+      point[1] = 4;
+      point[2] = 6;
+      point[3] = 2;
+
+      // 000
+    } else if (type == 13) {
+      nPoints = 0;
+
+      // +00
+    } else if (type == 14) {
+      nPoints = 4;
+
+      point[0] = 1;
+      point[1] = 3;
+      point[2] = 7;
+      point[3] = 5;
+
+      // -+0
+    } else if (type == 15) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 4;
+      point[2] = 6;
+      point[3] = 7;
+      point[4] = 3;
+      point[5] = 2;
+
+      // 0+0
+    } else if (type == 16) {
+      nPoints = 4;
+
+      point[0] = 2;
+      point[1] = 6;
+      point[2] = 7;
+      point[3] = 3;
+
+      // ++0
+    } else if (type == 17) {
+      nPoints = 6;
+
+      point[0] = 1;
+      point[1] = 3;
+      point[2] = 2;
+      point[3] = 6;
+      point[4] = 7;
+      point[5] = 5;
+
+      // --+
+    } else if (type == 18) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 1;
+      point[2] = 5;
+      point[3] = 7;
+      point[4] = 6;
+      point[5] = 2;
+
+      // 0-+
+    } else if (type == 19) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 1;
+      point[2] = 5;
+      point[3] = 7;
+      point[4] = 6;
+      point[5] = 4;
+
+      // +-+
+    } else if (type == 20) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 1;
+      point[2] = 3;
+      point[3] = 7;
+      point[4] = 6;
+      point[5] = 4;
+
+      // -0+
+    } else if (type == 21) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 4;
+      point[2] = 5;
+      point[3] = 7;
+      point[4] = 6;
+      point[5] = 2;
+
+      // 00+
+    } else if (type == 22) {
+      nPoints = 4;
+
+      point[0] = 4;
+      point[1] = 5;
+      point[2] = 7;
+      point[3] = 6;
+
+      // +0+
+    } else if (type == 23) {
+      nPoints = 6;
+
+      point[0] = 1;
+      point[1] = 3;
+      point[2] = 7;
+      point[3] = 6;
+      point[4] = 4;
+      point[5] = 5;
+
+      // -++
+    } else if (type == 24) {
+      nPoints = 6;
+
+      point[0] = 0;
+      point[1] = 4;
+      point[2] = 5;
+      point[3] = 7;
+      point[4] = 3;
+      point[5] = 2;
+
+      // 0++
+    } else if (type == 25) {
+      nPoints = 6;
+
+      point[0] = 2;
+      point[1] = 6;
+      point[2] = 4;
+      point[3] = 5;
+      point[4] = 7;
+      point[5] = 3;
+
+      // +++
+    } else {
+      nPoints = 6;
+
+      point[0] = 1;
+      point[1] = 3;
+      point[2] = 2;
+      point[3] = 6;
+      point[4] = 4;
+      point[5] = 5;
+    }
+  }
+};
+
+inline void setVectorValue(vec3f& vec, int pos, float value) {
+  if (pos == 0) {
+    vec.x = value;
+
+  } else if (pos == 1) {
+    vec.y = value;
+
+  } else {
+    vec.z = value;
+  }
+}
+
+inline float getVectorValue(vec3f vec, int pos) {
+  if (pos == 0) {
+    return vec.x;
+
+  } else if (pos == 1) {
+    return vec.y;
+
+  } else {
+    return vec.z;
+  }
+}
+
+// Intersect a ray with a axis-aligned bounding box
+inline bool cone_intersect_bbox(
+    const cone_data& cone, const bbox3f& bbox, bool printing) {
+  if (printing) {
+    printf("\nin cone_intersect_bbox\n");
+  }
+  // quick rejection test return false
+  // if this function return true then use normal one juust to test out first
+  // rejection test
+  auto box_centre = (bbox.max + bbox.min) * 0.5f;
+  auto box_e      = (bbox.max - bbox.min) * 0.5f;
+
+  // translate box to centre around cone origin
+  auto box_cone_vec          = box_centre - cone.origin;
+  auto cone_dir_dot_box_cone = dot(cone.dir, box_cone_vec);
+  auto radius                = dot(box_e, abs(cone.dir));
+
+  if (cone_dir_dot_box_cone + radius <= 0.0f) {
+    // The box is in the halfspace below the supporting plane of the cone.
+    // If we only use cone tracing when bounce is zero then we should never
+    // reach this
+    if (printing) {
+      printf("cone intersect box false\n");
+    }
+    return false;
+  }
+
+  // check if cone axis intersects box
+  if (intersect_bbox({cone.origin, cone.dir}, bbox)) {
+    if (printing) {
+      printf("cone intersect box true 1\n");
+    }
+    return true;
+  }
+
+  // Determine the box faces that are visible to the cone vertex.
+  int type = 0;
+  type += (box_cone_vec.x < -box_e.x ? 2 : (box_cone_vec.x > box_e.x ? 0 : 1));
+  type += 3 *
+          (box_cone_vec.y < -box_e.y ? 2 : (box_cone_vec.y > box_e.y ? 0 : 1));
+  type += 9 *
+          (box_cone_vec.z < -box_e.z ? 2 : (box_cone_vec.z > box_e.z ? 0 : 1));
+
+  // if cone vertex inside the box
+  if (type == 13) {
+    // The cone vertex is in the box.
+    if (printing) {
+      printf("cone intersect box true 2\n");
+    }
+    return true;
+  }
+  AABBPolygon polygon = AABBPolygon(type);
+
+  // Test polygon points.
+  vec3f X[8], PmV[8];
+  float coneDirDOTPmV[8], sqrConeDirDOTPmV[8], sqrLenPmV[8], q;
+  int   iMax = -1, jMax = -1;
+  float coneCosAngle_2 = cos(cone.spread) * cos(cone.spread);
+
+  for (unsigned char i = 0; i < polygon.nPoints; i++) {
+    int j  = polygon.point[i];
+    X[j].x = (j & 1 ? box_e.x : -box_e.x);
+    X[j].y = (j & 2 ? box_e.y : -box_e.y);
+    X[j].z = (j & 4 ? box_e.z : -box_e.z);
+
+    coneDirDOTPmV[j] = dot(cone.dir, X[j]) + cone_dir_dot_box_cone;
+
+    if (coneDirDOTPmV[j] > 0.0f) {
+      PmV[j]              = X[j] + box_cone_vec;
+      sqrConeDirDOTPmV[j] = coneDirDOTPmV[j] * coneDirDOTPmV[j];
+      sqrLenPmV[j]        = dot(PmV[j], PmV[j]);
+      q                   = sqrConeDirDOTPmV[j] - coneCosAngle_2 * sqrLenPmV[j];
+
+      if (q > 0.0f) {
+        if (printing) {
+          // printf("cone.spread: %f\n", cone.spread);
+          // printf("q: %f\n", q);
+          // printf("sqrConeDirDOTPmV[j]: %f\n", sqrConeDirDOTPmV[j]);
+          // printf("coneCosAngle_2: %f\n", coneCosAngle_2);
+          // printf("sqrLenPmV[j]: %f\n", sqrLenPmV[j]);
+          printf("cone intersect box true 2.5\n");
+        }
+
+        return true;
+      }
+
+      // Keep track of the maximum in case we must process box edges.
+      // This supports the gradient ascent search.
+      if (iMax == -1 || sqrConeDirDOTPmV[j] * sqrLenPmV[jMax] >
+                            sqrConeDirDOTPmV[jMax] * sqrLenPmV[j]) {
+        iMax = i;
+        jMax = j;
+      }
+    }
+  }
+
+  if (iMax == -1) {
+    if (printing) {
+      printf("cone intersect box false 2\n");
+    }
+    return false;
+  }
+
+  // Start the gradient ascent search at index jMax.
+  float maxSqrLenPmV     = sqrLenPmV[jMax];
+  float maxConeDirDOTPmV = coneDirDOTPmV[jMax];
+  vec3f maxX             = X[jMax];
+  float maxPmV[]         = {PmV[jMax].x, PmV[jMax].y, PmV[jMax].z};
+  int   k0, k1, k2, jDiff;
+  float s, fder, numer, denom, DdMmV, det;
+  vec3f MmV;
+  float coneDirection[] = {cone.dir.x, cone.dir.y, cone.dir.z};
+
+  // Search the counterclockwise edge <corner[jMax],corner[jNext]>.
+  int iNext = (iMax < polygon.nPoints - 1 ? iMax + 1 : 0);
+  int jNext = polygon.point[iNext];
+  jDiff     = jNext - jMax;
+  s         = (jDiff > 0 ? 1.0f : -1.0f);
+  k0        = abs(jDiff) >> 1;
+  fder = s * (coneDirection[k0] * maxSqrLenPmV - maxConeDirDOTPmV * maxPmV[k0]);
+
+  if (fder > 0.0f) {
+    // The edge has an interior local maximum in F because
+    // F(K[j0]) >= F(K[j1]) and the directional derivative of F at K0
+    // is positive.  Compute the local maximum point.
+    k1    = (k0 + 1) % 3;
+    k2    = (k1 + 1) % 3;
+    numer = maxPmV[k1] * maxPmV[k1] + maxPmV[k2] * maxPmV[k2];
+    denom = coneDirection[k1] * maxPmV[k1] + coneDirection[k2] * maxPmV[k2];
+
+    setVectorValue(MmV, k0, numer * coneDirection[k0]);
+    setVectorValue(MmV, k1,
+        denom * (getVectorValue(maxX, k1) + getVectorValue(box_cone_vec, k1)));
+    setVectorValue(MmV, k2,
+        denom * (getVectorValue(maxX, k2) + getVectorValue(box_cone_vec, k2)));
+
+    // Theoretically, DdMmV > 0, so there is no need to test positivity.
+    DdMmV = dot(cone.dir, MmV);
+    q     = DdMmV * DdMmV - coneCosAngle_2 * dot(MmV, MmV);
+
+    if (q > 0.0f) {
+      if (printing) {
+        printf("cone intersect box true 3\n");
+      }
+      return true;
+    }
+
+    // Determine on which side of the spherical arc coneDirection lives on.
+    // If in the polygon side, then there is an intersection.
+    det = s * (coneDirection[k1] * maxPmV[k2] - coneDirection[k2] * maxPmV[k1]);
+
+    if (det <= 0.0f) {
+    }
+    return (det <= 0.0f);
+  }
+
+  // Search the clockwise edge <corner[jMax],corner[jPrev]>.
+  int iPrev = (iMax > 0 ? iMax - 1 : polygon.nPoints - 1);
+  int jPrev = polygon.point[iPrev];
+  jDiff     = jMax - jPrev;
+  s         = (jDiff > 0 ? 1.0f : -1.0f);
+  k0        = abs(jDiff) >> 1;
+  fder      = -s *
+         (coneDirection[k0] * maxSqrLenPmV - maxConeDirDOTPmV * maxPmV[k0]);
+
+  if (fder > 0.0f) {
+    // The edge has an interior local maximum in F because
+    // F(K[j0]) >= F(K[j1]) and the directional derivative of F at K0
+    // is positive.  Compute the local maximum point.
+    k1    = (k0 + 1) % 3;
+    k2    = (k1 + 1) % 3;
+    numer = maxPmV[k1] * maxPmV[k1] + maxPmV[k2] * maxPmV[k2];
+    denom = coneDirection[k1] * maxPmV[k1] + coneDirection[k2] * maxPmV[k2];
+
+    setVectorValue(MmV, k0, numer * coneDirection[k0]);
+    setVectorValue(MmV, k1,
+        denom * (getVectorValue(maxX, k1) + getVectorValue(box_cone_vec, k1)));
+    setVectorValue(MmV, k2,
+        denom * (getVectorValue(maxX, k2) + getVectorValue(box_cone_vec, k2)));
+
+    // Theoretically, DdMmV > 0, so there is no need to test positivity.
+    DdMmV = dot(cone.dir, MmV);
+    q     = DdMmV * DdMmV - coneCosAngle_2 * dot(MmV, MmV);
+
+    if (q > 0.0f) {
+      if (printing) {
+        printf("cone intersect box true 4\n");
+      }
+      return true;
+    }
+
+    // Determine on which side of the spherical arc coneDirection lives on.
+    // If in the polygon side, then there is an intersection.
+    det = s * (coneDirection[k1] * maxPmV[k2] - coneDirection[k2] * maxPmV[k1]);
+
+    if (det <= 0.0f) {
+    }
+
+    return (det <= 0.0f);
+  }
+  if (printing) {
+    printf("cone intersect box false 3\n");
+  }
+  return false;
+
+  // return intersect_bbox({cone.origin, cone.dir}, bbox);
 }
 
 }  // namespace yocto

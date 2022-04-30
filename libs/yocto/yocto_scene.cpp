@@ -78,6 +78,7 @@ ray3f eval_camera(
         lens_uv.x * camera.aperture / 2, lens_uv.y * camera.aperture / 2, 0};
     // point on the focus plane
     auto p = dc * camera.focus / abs(dc.z);
+    // printf("point on focus plane: %f, %f, %f\n", p.x, p.y, p.z);
     // correct ray direction to account for camera focusing
     auto d = normalize(p - e);
     // done
@@ -498,7 +499,12 @@ vec3f eval_shading_normal(const scene_data& scene,
 vec4f eval_color(const scene_data& scene, const instance_data& instance,
     int element, const vec2f& uv) {
   auto& shape = scene.shapes[instance.shape];
-  if (shape.colors.empty()) return {1, 1, 1, 1};
+  if (shape.colors.empty()) {
+    // if (true) {
+    // I ADDED THIS, ORIGINAL LINE ABOVE for horse ply which somehow contained
+    // colour information
+    return {1, 1, 1, 1};
+  }
   if (!shape.triangles.empty()) {
     auto t = shape.triangles[element];
     return interpolate_triangle(
@@ -534,16 +540,16 @@ material_point eval_material(const scene_data& scene,
       scene, material.scattering_tex, texcoord, true);
 
   // material point
-  auto point         = material_point{};
-  point.type         = material.type;
-  point.emission     = material.emission * xyz(emission_tex);
-  point.color        = material.color * xyz(color_tex) * xyz(color_shp);
-  point.opacity      = material.opacity * color_tex.w * color_shp.w;
-  point.metallic     = material.metallic * roughness_tex.z;
-  point.roughness    = material.roughness * roughness_tex.y;
-  point.roughness    = point.roughness * point.roughness;
-  point.ior          = material.ior;
-  point.scattering   = material.scattering * xyz(scattering_tex);
+  auto point       = material_point{};
+  point.type       = material.type;
+  point.emission   = material.emission * xyz(emission_tex);  // check this next
+  point.color      = material.color * xyz(color_tex) * xyz(color_shp);
+  point.opacity    = material.opacity * color_tex.w * color_shp.w;
+  point.metallic   = material.metallic * roughness_tex.z;
+  point.roughness  = material.roughness * roughness_tex.y;
+  point.roughness  = point.roughness * point.roughness;
+  point.ior        = material.ior;
+  point.scattering = material.scattering * xyz(scattering_tex);
   point.scanisotropy = material.scanisotropy;
   point.trdepth      = material.trdepth;
 
@@ -759,7 +765,7 @@ void tesselate_subdiv(
       for (auto i = 0; i < 4; i++) {
         auto& displacement_tex = scene.textures[subdiv.displacement_tex];
         auto  disp             = mean(
-            eval_texture(displacement_tex, subdiv.texcoords[qtxt[i]], false));
+                         eval_texture(displacement_tex, subdiv.texcoords[qtxt[i]], false));
         if (!displacement_tex.pixelsb.empty()) disp -= 0.5f;
         offset[qpos[i]] += subdiv.displacement * disp;
         count[qpos[i]] += 1;

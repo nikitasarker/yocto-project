@@ -132,9 +132,15 @@ struct scene_intersection {
 shape_intersection intersect_shape(const shape_bvh& bvh,
     const shape_data& shape, const ray3f& ray, bool find_any = false);
 scene_intersection intersect_scene(const scene_bvh& bvh,
-    const scene_data& scene, const ray3f& ray, bool find_any = false);
+    const scene_data& scene, const ray3f& ray, bool printing = false,
+    bool find_any = false);
 scene_intersection intersect_instance(const scene_bvh& bvh,
     const scene_data& scene, int instance, const ray3f& ray,
+    bool find_any = false);
+
+// Intersect cone with a bvh
+scene_intersection cone_intersect_scene(const scene_bvh& bvh,
+    const scene_data& scene, const cone_data& cone, bool printing = false,
     bool find_any = false);
 
 // Find a shape element that overlaps a point within a given distance

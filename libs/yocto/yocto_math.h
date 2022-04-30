@@ -99,6 +99,7 @@ inline void  swap(float& a, float& b);
 inline float smoothstep(float a, float b, float u);
 inline float bias(float a, float bias);
 inline float gain(float a, float gain);
+inline bool equal(float a, float b);
 
 inline int  abs(int a);
 inline int  min(int a, int b);
@@ -321,6 +322,7 @@ inline vec3f pow(const vec3f& a, const vec3f& b);
 inline vec3f gain(const vec3f& a, float b);
 inline bool  isfinite(const vec3f& a);
 inline void  swap(vec3f& a, vec3f& b);
+inline vec3f projectVector(vec3f a, vec3f b);
 
 // Vector sequence operations.
 inline int          size(const vec4f& a);
@@ -1390,6 +1392,11 @@ inline float gain(float a, float gain) {
   return (a < 0.5f) ? bias(a * 2, gain) / 2
                     : bias(a * 2 - 1, 1 - gain) / 2 + 0.5f;
 }
+inline bool equal(float a, float b) {
+  // EPSILON = 1E-4f in ConeTracing
+  float diffAbs = abs(a - b);
+  return diffAbs < flt_eps;
+}
 
 inline int  abs(int a) { return a < 0 ? -a : a; }
 inline int  min(int a, int b) { return (a < b) ? a : b; }
@@ -1697,6 +1704,9 @@ inline bool isfinite(const vec3f& a) {
   return isfinite(a.x) && isfinite(a.y) && isfinite(a.z);
 }
 inline void swap(vec3f& a, vec3f& b) { std::swap(a, b); }
+inline vec3f projectVector(vec3f a, vec3f b) {
+    return b * dot(a, b);
+}
 
 // Vector sequence operations.
 inline int          size(const vec4f& a) { return 4; }
