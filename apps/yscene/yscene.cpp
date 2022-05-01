@@ -219,41 +219,41 @@ void run_render(const render_params& params_) {
   // build bvh
   auto bvh = make_bvh(scene, params);
 
-  printf("bvh nodes size: %ld\n", bvh.nodes.size());
-  printf("bvh primitives size: %ld\n", bvh.primitives.size());
-  printf("bvh shapes size: %ld\n", bvh.shapes.size());
-  for (auto node : bvh.nodes) {
-    printf("\n\nnode start: %d\n", node.start);
-    printf("node num: %d\n", node.num);
-    if (node.internal) {
-      printf("internal node\n");
-    } else {
-      printf("external node\n");
-    }
-    printf("node bbox min: %f, %f, %f\n", node.bbox.min.x, node.bbox.min.y,
-        node.bbox.min.z);
-    printf("node bbox max: %f, %f, %f\n", node.bbox.max.x, node.bbox.max.y,
-        node.bbox.max.z);
-    for (auto idx = node.start; idx < node.start + node.num; idx++) {
-      printf("\n======idx: %d\n", idx);
-      auto& instance_ = scene.instances[bvh.primitives[idx]];
-      printf("bvh.shapes[instance_.shape].nodes size: %ld\n",
-          bvh.shapes[instance_.shape].nodes.size());
-      // for (auto n : bvh.shapes[instance_.shape].nodes) {
-      //   printf("node start: %d\n", n.start);
-      //   printf("node num: %d\n", n.num);
-      //   if (n.internal) {
-      //     printf("internal node\n");
-      //   } else {
-      //     printf("external node\n");
-      //   }
-      //   printf("node bbox min: %f, %f, %f\n", n.bbox.min.x, n.bbox.min.y,
-      //       n.bbox.min.z);
-      //   printf("node bbox max: %f, %f, %f\n", n.bbox.max.x, n.bbox.max.y,
-      //       n.bbox.max.z);
-      // }
-    }
-  }
+  // printf("bvh nodes size: %ld\n", bvh.nodes.size());
+  // printf("bvh primitives size: %ld\n", bvh.primitives.size());
+  // printf("bvh shapes size: %ld\n", bvh.shapes.size());
+  // for (auto node : bvh.nodes) {
+  //   printf("\n\nnode start: %d\n", node.start);
+  //   printf("node num: %d\n", node.num);
+  //   if (node.internal) {
+  //     printf("internal node\n");
+  //   } else {
+  //     printf("external node\n");
+  //   }
+  //   printf("node bbox min: %f, %f, %f\n", node.bbox.min.x, node.bbox.min.y,
+  //       node.bbox.min.z);
+  //   printf("node bbox max: %f, %f, %f\n", node.bbox.max.x, node.bbox.max.y,
+  //       node.bbox.max.z);
+  //   for (auto idx = node.start; idx < node.start + node.num; idx++) {
+  //     printf("\n======idx: %d\n", idx);
+  //     auto& instance_ = scene.instances[bvh.primitives[idx]];
+  //     printf("bvh.shapes[instance_.shape].nodes size: %ld\n",
+  //         bvh.shapes[instance_.shape].nodes.size());
+  //     // for (auto n : bvh.shapes[instance_.shape].nodes) {
+  //     //   printf("node start: %d\n", n.start);
+  //     //   printf("node num: %d\n", n.num);
+  //     //   if (n.internal) {
+  //     //     printf("internal node\n");
+  //     //   } else {
+  //     //     printf("external node\n");
+  //     //   }
+  //     //   printf("node bbox min: %f, %f, %f\n", n.bbox.min.x, n.bbox.min.y,
+  //     //       n.bbox.min.z);
+  //     //   printf("node bbox max: %f, %f, %f\n", n.bbox.max.x, n.bbox.max.y,
+  //     //       n.bbox.max.z);
+  //     // }
+  //   }
+  // }
 
   // init renderer
   auto lights = make_lights(scene, params);

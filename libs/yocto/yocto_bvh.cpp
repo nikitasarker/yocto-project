@@ -1013,14 +1013,15 @@ static bool cone_intersect_bvh(const shape_bvh& bvh, const shape_data& shape,
       // }
       for (auto idx = node.start; idx < node.start + node.num; idx++) {
         auto& l = shape.lines[bvh.primitives[idx]];
-        if (intersect_line(ray, shape.positions[l.x], shape.positions[l.y],
-                shape.radius[l.x], shape.radius[l.y], uv, distance, printing)) {
-          // if (intersect_cylinder(cone, shape.positions[l.x],
-          // shape.positions[l.y],
-          //         shape.radius[l.x], shape.radius[l.y], uv, distance)) {
-          hit      = true;
-          element  = bvh.primitives[idx];
-          ray.tmax = distance;
+        // if (intersect_line(ray, shape.positions[l.x], shape.positions[l.y],
+        //         shape.radius[l.x], shape.radius[l.y], uv, distance,
+        //         printing)) {
+        if (intersect_cylinder(cone, shape.positions[l.x], shape.positions[l.y],
+                shape.radius[l.x], shape.radius[l.y], uv, distance)) {
+          hit       = true;
+          element   = bvh.primitives[idx];
+          ray.tmax  = distance;
+          cone.tmax = distance;
         }
       }
     } else if (!shape.triangles.empty()) {
@@ -1045,12 +1046,12 @@ static bool cone_intersect_bvh(const shape_bvh& bvh, const shape_data& shape,
       }
     }
 
-    if (counter_2 > 80) {
-      if (printing) {
-        printf("counter_2 > 20 return early\n");
-      }
-      return hit;
-    }
+    // if (counter_2 > 80) {
+    //   if (printing) {
+    //     printf("counter_2 > 20 return early\n");
+    //   }
+    //   return hit;
+    // }
 
     // check for early exit
     if (find_any && hit) {

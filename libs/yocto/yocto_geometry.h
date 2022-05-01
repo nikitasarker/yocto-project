@@ -1091,6 +1091,15 @@ namespace yocto {
 // Intersect a cone with a line (approximate)
 inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
     const vec3f& p1, float r0, float r1, vec2f& uv, float& dist) {
+  auto ray = ray3f{cone.origin, cone.dir};
+  ray.tmin = cone.tmin;
+  ray.tmax = cone.tmax;
+
+  // if (intersect_line(ray, p0, p1, r0, r1, uv, dist, false)) {
+  //   return true;
+  // }
+  // return false;
+
   float N_CONE_POINTS    = 1.0;
   float CONE_AREA_FACTOR = 0.2;
 
@@ -1139,8 +1148,7 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
                               planeYAxis * coneCircleR * r * sin(theta));
 
     direction = normalize(point - cone.origin);
-    if (intersect_line(
-            ray3f{cone.origin, direction}, p0, p1, r0, r1, uv, t_dist, false)) {
+    if (intersect_line(ray, p0, p1, r0, r1, uv, t_dist, false)) {
       uv_average.push_back(uv);
 
       if (minDistance > t_dist) {
@@ -1161,6 +1169,7 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
     // intersection occurred: set params and exit
     dist = t_dist;
 
+    // TODO WORK ON THIS
     // update area fraction
     vec2f s = {0, 0};
     for (auto u : uv_average) {

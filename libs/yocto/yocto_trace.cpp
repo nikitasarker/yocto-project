@@ -333,30 +333,6 @@ static ray3f sample_camera(const camera_data& camera, const vec2i& ij,
   }
 }
 
-static float get_pixel_size(
-    const camera_data& camera, const vec2i& image_size, const vec2f& luv) {
-  auto  film   = camera.aspect >= 1
-                     ? vec2f{camera.film, camera.film / camera.aspect}
-                     : vec2f{camera.film * camera.aspect, camera.film};
-  vec2f centre = {image_size.x / 2.0f, image_size.y / 2.0f};
-  auto  q      = vec3f{
-      film.x * (0.5f - centre.x), film.y * (centre.y - 0.5f), camera.lens};
-  // ray direction through the lens center
-  auto dc = -normalize(q);
-  // point on the lens
-  auto e = vec3f{luv.x * camera.aperture / 2, luv.y * camera.aperture / 2, 0};
-  // point on the focus plane
-  auto p = dc * camera.focus / abs(dc.z);
-  // correct ray direction to account for camera focusing
-  // distance from camera to focus plane
-  auto  dist       = length(p - e);
-  float fov        = 0.945f;
-  float width      = 2.0f * dist * tan(fov / 2.0f);
-  float pixel_size = width / image_size.x;
-
-  return pixel_size;
-}
-
 // Sample camera for cone tracing
 static cone_data sample_camera_cone(const camera_data& camera, const vec2i& ij,
     const vec2i& image_size, const vec2f& puv, const vec2f& luv,
@@ -379,23 +355,31 @@ static cone_data sample_camera_cone(const camera_data& camera, const vec2i& ij,
   auto p = dc * camera.focus / abs(dc.z);
   // printf("point on focus plane: %f, %f, %f\n", p.x, p.y, p.z);
   // correct ray direction to account for camera focusing
-  auto dist_ = length(p - e);
-  auto dir   = normalize(p - e);
+  auto dir = normalize(p - e);
   // done
   auto ray = ray3f{
       transform_point(camera.frame, e), transform_direction(camera.frame, dir)};
 
   // get pixel size
-  auto pixel_size = get_pixel_size(camera, image_size, lens_uv);
+  auto  dist       = length(p - camera.frame.o);
+  float width      = 2.0f * dist * tan(camera.fov / 2.0f);
+  float pixel_size = width / image_size.x;
 
   // get cone spread
-  float spread = abs(atan(0.5f * pixel_size / dist_));
+  float spread = abs(atan(0.5f * pixel_size / dist));
   // float spread = 0.0f;
-  if (printing) {
-    printf("pixel_size: %f\n", pixel_size);
-    printf("dist_: %f\n", dist_);
-    printf("spread: %f\n\n", spread);
-  }
+
+  // if (printing) {
+  //   printf("====in sample cone camera\n");
+  //   printf("point on lens e: %f, %f, %f\n", e.x, e.y, e.z);
+  //   printf("point on focus plane p: %f, %f, %f\n", p.x, p.y, p.z);
+  //   printf("camera origin: \n%f, %f, %f \n", camera.frame.o.x,
+  //   camera.frame.o.y,
+  //       camera.frame.o.z);
+  //   printf("dist: %f\n", dist);
+  //   printf("image_size: %d\n", image_size.x);
+  //   printf("pixel_size: %f\n\n", pixel_size);
+  // }
 
   return {ray.o, ray.d, spread};
 }
@@ -1617,9 +1601,9 @@ void trace_sample(trace_state& state, const scene_data& scene,
   bool printing = false;
   // if (idx % 720 > 500 && idx % 720 < 505 && idx / 720 > 170 &&
   //     idx / 720 < 175) {
-  if (idx % 720 > 1 && idx % 720 < 3 && idx / 720 > 1 && idx / 720 < 3) {
-    printing = true;
-  }
+  // if (idx % 720 > 1 && idx % 720 < 3 && idx / 720 > 1 && idx / 720 < 3) {
+  //   printing = true;
+  // }
 
   if (params.sampler == trace_sampler_type::cone) {
     auto cone_sampler = get_cone_trace_sampler_func(params);
