@@ -303,7 +303,7 @@ inline bool intersect_cylinder(const ray3f& ray, const vec3f& p0,
 
 // Intersect a ray with a line
 inline bool intersect_line(const ray3f& ray, const vec3f& p0, const vec3f& p1,
-    float r0, float r1, vec2f& uv, float& dist, bool printing);
+    float r0, float r1, vec2f& uv, float& dist);
 
 // Intersect a ray with a triangle
 inline bool intersect_triangle(const ray3f& ray, const vec3f& p0,
@@ -323,9 +323,30 @@ inline bool intersect_bbox(
 }  // namespace yocto
 
 // -----------------------------------------------------------------------------
-// RAY-PRIMITIVE INTERSECTION FUNCTIONS
+// CONE-PRIMITIVE INTERSECTION FUNCTIONS
 // -----------------------------------------------------------------------------
 namespace yocto {
+
+// Intersect a cone with a point (approximate)
+inline bool intersect_point(const cone_data& cone, const vec3f& p, float r,
+    std::vector<vec2f>& uv, float& dist);
+
+// Intersect a cone with a line (approximate)
+inline bool intersect_line(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, float r0, float r1, vec2f& uv, float& dist);
+
+// Intersect a cone with a cylinder (approximate)
+inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, float r0, float r1, std::vector<vec2f>& uv, float& dist);
+
+// Intersect a cone with a triangle (approximate)
+inline bool intersect_triangle(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, const vec3f& p2, std::vector<vec2f>& uv, float& dist);
+
+// Intersect a cone with a quad (approximate)
+inline bool intersect_quad(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, const vec3f& p2, const vec3f& p3, std::vector<vec2f>& uv,
+    float& dist);
 
 // Intersect a ray with a axis-aligned bounding box
 inline bool cone_intersect_bbox(
@@ -781,7 +802,7 @@ inline bool intersect_infinite_cylinder(const ray3f& ray, const vec3f& p0,
 // Intersect a ray with a cylinder
 inline bool intersect_cylinder(const ray3f& ray, const vec3f& p0,
     const vec3f& p1, float r0, float r1, vec2f& uv, float& dist) {
-  printf("ray direction: %f, %f, %f\n", ray.d.x, ray.d.y, ray.d.z);
+  // printf("ray direction: %f, %f, %f\n", ray.d.x, ray.d.y, ray.d.z);
   vec3f axis = normalize(p1 - p0);
   vec3f normal, point;
 
@@ -914,7 +935,7 @@ inline bool intersect_cylinder(const ray3f& ray, const vec3f& p0,
 
 // Intersect a ray with a line
 inline bool intersect_line(const ray3f& ray, const vec3f& p0, const vec3f& p1,
-    float r0, float r1, vec2f& uv, float& dist, bool printing) {
+    float r0, float r1, vec2f& uv, float& dist) {
   // setup intersection params
   auto u = ray.d;
   auto v = p1 - p0;
@@ -1088,20 +1109,88 @@ inline bool intersect_bbox(
 // -----------------------------------------------------------------------------
 namespace yocto {
 
-// Intersect a cone with a line (approximate)
-inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
-    const vec3f& p1, float r0, float r1, vec2f& uv, float& dist) {
+// Intersect a cone with a point (approximate)
+inline bool intersect_point(const cone_data& cone, const vec3f& p, float radius,
+    std::vector<vec2f>& uv, float& dist) {
   auto ray = ray3f{cone.origin, cone.dir};
   ray.tmin = cone.tmin;
   ray.tmax = cone.tmax;
 
-  // if (intersect_line(ray, p0, p1, r0, r1, uv, dist, false)) {
-  //   return true;
-  // }
-  // return false;
+  vec3f coneCircleV = cone.origin +
+                      cone.dir * (length((p + radius) - cone.origin));
 
-  float N_CONE_POINTS    = 1.0;
-  float CONE_AREA_FACTOR = 0.2;
+  float coneCircleR = length(coneCircleV - cone.origin) * tanf(cone.spread);
+
+  // compute plane coordenate system
+  vec3f planeXAxis = normalize(cross(vec3f{0.0f, 0.0f, 1.0f}, -cone.dir));
+  vec3f planeYAxis = normalize(cross(-cone.dir, planeXAxis));
+
+  /*approximation through rays
+  Shoot rays inside the circle and estimate the area
+      _x_
+    x/   \x
+   x|  x  |x
+    x\_x_/x
+
+  */
+
+  int   nPoints = 0;
+  vec3f direction;
+
+  float minDistance = flt_max;
+  float t_dist      = -1;
+
+  vec3f point;
+  float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
+  phi *= phi;
+  float theta, r;
+
+  for (int i = 1; i <= N_CONE_POINTS; i++) {
+    if (i > N_CONE_POINTS) {
+      r = 1.0f;
+    } else {
+      r = sqrtf(i - 0.5f) / sqrtf(N_CONE_POINTS - 0.5f);
+    }
+
+    theta = 2.0f * pi * i / phi;
+
+    point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
+                              planeYAxis * coneCircleR * r * sin(theta));
+
+    direction = normalize(point - cone.origin);
+    vec2f uv_ = {};
+    if (intersect_point(ray, p, r, uv_, t_dist)) {
+      uv.push_back(uv_);
+
+      if (minDistance > t_dist) {
+        minDistance = t_dist;
+      }
+
+      nPoints++;
+    }
+  }
+
+  float areaFraction = nPoints / N_CONE_POINTS;
+
+  if (areaFraction <= 0.3f) {
+    return false;
+  }
+
+  if (t_dist != -1) {
+    // intersection occurred: set params and exit
+    dist = t_dist;
+    return true;
+  }
+
+  return false;
+}
+
+// Intersect a cone with a line (approximate)
+inline bool intersect_line(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, float r0, float r1, std::vector<vec2f>& uv, float& dist) {
+  auto ray = ray3f{cone.origin, cone.dir};
+  ray.tmin = cone.tmin;
+  ray.tmax = cone.tmax;
 
   vec3f coneCircleV = cone.origin +
                       cone.dir * (length((max(p0, p1) + r0) - cone.origin));
@@ -1126,14 +1215,11 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
 
   float minDistance = flt_max;
   float t_dist      = -1;
-  auto  uv_average  = std::vector<vec2f>{};
 
   vec3f point;
   float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
   phi *= phi;
   float theta, r;
-  // float     theta;
-  // rng_state rng;
 
   for (int i = 1; i <= N_CONE_POINTS; i++) {
     if (i > N_CONE_POINTS) {
@@ -1148,8 +1234,9 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
                               planeYAxis * coneCircleR * r * sin(theta));
 
     direction = normalize(point - cone.origin);
-    if (intersect_line(ray, p0, p1, r0, r1, uv, t_dist, false)) {
-      uv_average.push_back(uv);
+    vec2f uv_ = {};
+    if (intersect_line(ray, p0, p1, r0, r1, uv_, t_dist)) {
+      uv.push_back(uv_);
 
       if (minDistance > t_dist) {
         minDistance = t_dist;
@@ -1168,16 +1255,236 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
   if (t_dist != -1) {
     // intersection occurred: set params and exit
     dist = t_dist;
+    return true;
+  }
 
-    // TODO WORK ON THIS
-    // update area fraction
-    vec2f s = {0, 0};
-    for (auto u : uv_average) {
-      s += u;
+  return false;
+}
+
+// Intersect a cone with a cylinder (approximate)
+inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, float r0, float r1, std::vector<vec2f>& uv, float& dist) {
+  auto ray = ray3f{cone.origin, cone.dir};
+  ray.tmin = cone.tmin;
+  ray.tmax = cone.tmax;
+
+  vec3f coneCircleV = cone.origin +
+                      cone.dir * (length((max(p0, p1) + r0) - cone.origin));
+
+  float coneCircleR = length(coneCircleV - cone.origin) * tanf(cone.spread);
+
+  // compute plane coordenate system
+  vec3f planeXAxis = normalize(cross(vec3f{0.0f, 0.0f, 1.0f}, -cone.dir));
+  vec3f planeYAxis = normalize(cross(-cone.dir, planeXAxis));
+
+  /*approximation through rays
+  Shoot rays inside the circle and estimate the area
+      _x_
+    x/   \x
+   x|  x  |x
+    x\_x_/x
+
+  */
+
+  int   nPoints = 0;
+  vec3f direction;
+
+  float minDistance = flt_max;
+  float t_dist      = -1;
+
+  vec3f point;
+  float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
+  phi *= phi;
+  float theta, r;
+
+  for (int i = 1; i <= N_CONE_POINTS; i++) {
+    if (i > N_CONE_POINTS) {
+      r = 1.0f;
+    } else {
+      r = sqrtf(i - 0.5f) / sqrtf(N_CONE_POINTS - 0.5f);
     }
 
-    uv = s / nPoints;
+    theta = 2.0f * pi * i / phi;
 
+    point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
+                              planeYAxis * coneCircleR * r * sin(theta));
+
+    direction = normalize(point - cone.origin);
+    vec2f uv_ = {};
+    if (intersect_cylinder(ray, p0, p1, r0, r1, uv_, t_dist)) {
+      // if (intersect_line(ray, p0, p1, r0, r1, uv_, t_dist)) {
+      uv.push_back(uv_);
+
+      if (minDistance > t_dist) {
+        minDistance = t_dist;
+      }
+
+      nPoints++;
+    }
+  }
+
+  float areaFraction = nPoints / N_CONE_POINTS;
+
+  if (areaFraction <= 0.3f) {
+    return false;
+  }
+
+  if (t_dist != -1) {
+    // intersection occurred: set params and exit
+    dist = t_dist;
+    return true;
+  }
+
+  return false;
+}
+
+// Intersect a cone with a triangle (approximate)
+inline bool intersect_triangle(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, const vec3f& p2, std::vector<vec2f>& uv, float& dist) {
+  auto ray = ray3f{cone.origin, cone.dir};
+  ray.tmin = cone.tmin;
+  ray.tmax = cone.tmax;
+
+  vec3f coneCircleV = cone.origin +
+                      cone.dir * (length((max(p0, p1) + p2) - cone.origin));
+
+  float coneCircleR = length(coneCircleV - cone.origin) * tanf(cone.spread);
+
+  // compute plane coordenate system
+  vec3f planeXAxis = normalize(cross(vec3f{0.0f, 0.0f, 1.0f}, -cone.dir));
+  vec3f planeYAxis = normalize(cross(-cone.dir, planeXAxis));
+
+  /*approximation through rays
+  Shoot rays inside the circle and estimate the area
+      _x_
+    x/   \x
+   x|  x  |x
+    x\_x_/x
+
+  */
+
+  int   nPoints = 0;
+  vec3f direction;
+
+  float minDistance = flt_max;
+  float t_dist      = -1;
+
+  vec3f point;
+  float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
+  phi *= phi;
+  float theta, r;
+
+  for (int i = 1; i <= N_CONE_POINTS; i++) {
+    if (i > N_CONE_POINTS) {
+      r = 1.0f;
+    } else {
+      r = sqrtf(i - 0.5f) / sqrtf(N_CONE_POINTS - 0.5f);
+    }
+
+    theta = 2.0f * pi * i / phi;
+
+    point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
+                              planeYAxis * coneCircleR * r * sin(theta));
+
+    direction = normalize(point - cone.origin);
+    vec2f uv_ = {};
+    if (intersect_triangle(ray, p0, p1, p2, uv_, t_dist)) {
+      uv.push_back(uv_);
+
+      if (minDistance > t_dist) {
+        minDistance = t_dist;
+      }
+
+      nPoints++;
+    }
+  }
+
+  float areaFraction = nPoints / N_CONE_POINTS;
+
+  if (areaFraction <= 0.3f) {
+    return false;
+  }
+
+  if (t_dist != -1) {
+    // intersection occurred: set params and exit
+    dist = t_dist;
+    return true;
+  }
+
+  return false;
+}
+
+// Intersect a cone with a quad (approximate)
+inline bool intersect_quad(const cone_data& cone, const vec3f& p0,
+    const vec3f& p1, const vec3f& p2, const vec3f& p3, std::vector<vec2f>& uv,
+    float& dist) {
+  auto ray = ray3f{cone.origin, cone.dir};
+  ray.tmin = cone.tmin;
+  ray.tmax = cone.tmax;
+
+  vec3f coneCircleV = cone.origin +
+                      cone.dir * (length((max(p0, p1) + p2) - cone.origin));
+
+  float coneCircleR = length(coneCircleV - cone.origin) * tanf(cone.spread);
+
+  // compute plane coordenate system
+  vec3f planeXAxis = normalize(cross(vec3f{0.0f, 0.0f, 1.0f}, -cone.dir));
+  vec3f planeYAxis = normalize(cross(-cone.dir, planeXAxis));
+
+  /*approximation through rays
+  Shoot rays inside the circle and estimate the area
+      _x_
+    x/   \x
+   x|  x  |x
+    x\_x_/x
+
+  */
+
+  int   nPoints = 0;
+  vec3f direction;
+
+  float minDistance = flt_max;
+  float t_dist      = -1;
+
+  vec3f point;
+  float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
+  phi *= phi;
+  float theta, r;
+
+  for (int i = 1; i <= N_CONE_POINTS; i++) {
+    if (i > N_CONE_POINTS) {
+      r = 1.0f;
+    } else {
+      r = sqrtf(i - 0.5f) / sqrtf(N_CONE_POINTS - 0.5f);
+    }
+
+    theta = 2.0f * pi * i / phi;
+
+    point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
+                              planeYAxis * coneCircleR * r * sin(theta));
+
+    direction = normalize(point - cone.origin);
+    vec2f uv_ = {};
+    if (intersect_quad(ray, p0, p1, p2, p3, uv_, t_dist)) {
+      uv.push_back(uv_);
+
+      if (minDistance > t_dist) {
+        minDistance = t_dist;
+      }
+
+      nPoints++;
+    }
+  }
+
+  float areaFraction = nPoints / N_CONE_POINTS;
+
+  if (areaFraction <= 0.3f) {
+    return false;
+  }
+
+  if (t_dist != -1) {
+    // intersection occurred: set params and exit
+    dist = t_dist;
     return true;
   }
 
@@ -1497,9 +1804,6 @@ inline float getVectorValue(vec3f vec, int pos) {
 // Intersect a ray with a axis-aligned bounding box
 inline bool cone_intersect_bbox(
     const cone_data& cone, const bbox3f& bbox, bool printing) {
-  if (printing) {
-    printf("\nin cone_intersect_bbox\n");
-  }
   // quick rejection test return false
   // if this function return true then use normal one juust to test out first
   // rejection test
@@ -1515,17 +1819,11 @@ inline bool cone_intersect_bbox(
     // The box is in the halfspace below the supporting plane of the cone.
     // If we only use cone tracing when bounce is zero then we should never
     // reach this
-    if (printing) {
-      printf("cone intersect box false\n");
-    }
     return false;
   }
 
   // check if cone axis intersects box
   if (intersect_bbox({cone.origin, cone.dir}, bbox)) {
-    if (printing) {
-      printf("cone intersect box true 1\n");
-    }
     return true;
   }
 
@@ -1540,9 +1838,6 @@ inline bool cone_intersect_bbox(
   // if cone vertex inside the box
   if (type == 13) {
     // The cone vertex is in the box.
-    if (printing) {
-      printf("cone intersect box true 2\n");
-    }
     return true;
   }
   AABBPolygon polygon = AABBPolygon(type);
@@ -1568,15 +1863,6 @@ inline bool cone_intersect_bbox(
       q                   = sqrConeDirDOTPmV[j] - coneCosAngle_2 * sqrLenPmV[j];
 
       if (q > 0.0f) {
-        if (printing) {
-          // printf("cone.spread: %f\n", cone.spread);
-          // printf("q: %f\n", q);
-          // printf("sqrConeDirDOTPmV[j]: %f\n", sqrConeDirDOTPmV[j]);
-          // printf("coneCosAngle_2: %f\n", coneCosAngle_2);
-          // printf("sqrLenPmV[j]: %f\n", sqrLenPmV[j]);
-          printf("cone intersect box true 2.5\n");
-        }
-
         return true;
       }
 
@@ -1591,9 +1877,6 @@ inline bool cone_intersect_bbox(
   }
 
   if (iMax == -1) {
-    if (printing) {
-      printf("cone intersect box false 2\n");
-    }
     return false;
   }
 
@@ -1635,9 +1918,6 @@ inline bool cone_intersect_bbox(
     q     = DdMmV * DdMmV - coneCosAngle_2 * dot(MmV, MmV);
 
     if (q > 0.0f) {
-      if (printing) {
-        printf("cone intersect box true 3\n");
-      }
       return true;
     }
 
@@ -1679,9 +1959,6 @@ inline bool cone_intersect_bbox(
     q     = DdMmV * DdMmV - coneCosAngle_2 * dot(MmV, MmV);
 
     if (q > 0.0f) {
-      if (printing) {
-        printf("cone intersect box true 4\n");
-      }
       return true;
     }
 
@@ -1693,9 +1970,6 @@ inline bool cone_intersect_bbox(
     }
 
     return (det <= 0.0f);
-  }
-  if (printing) {
-    printf("cone intersect box false 3\n");
   }
   return false;
 

@@ -2322,7 +2322,7 @@ shape_intersection intersect_lines_bvh(const bvh_tree& bvh,
           int idx, const ray3f& ray, vec2f& uv, float& distance) {
         auto& l = lines[idx];
         return intersect_line(ray, positions[l.x], positions[l.y], radius[l.x],
-             radius[l.y], uv, distance, false);
+             radius[l.y], uv, distance);
        },
        ray, intersection.element, intersection.uv, intersection.distance,
        find_any);

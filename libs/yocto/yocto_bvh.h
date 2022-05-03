@@ -126,6 +126,20 @@ struct scene_intersection {
   bool  hit      = false;
 };
 
+// array of scene intersections for cone tracing
+struct cone_scene_intersection {
+  int           instance = -1;
+  int           element  = -1;
+  vector<vec2f> uv       = {};
+  float         distance = 0;
+  bool          hit      = false;
+};
+// struct cone_scene_intersection {
+//   vector<scene_intersection> intersections = {};
+//   // use own hit bool
+//   bool hit = false;
+// };
+
 // Intersect ray with a bvh returning either the first or any intersection
 // depending on `find_any`. Returns the ray distance , the instance id,
 // the shape element index and the element barycentric coordinates.
@@ -139,9 +153,9 @@ scene_intersection intersect_instance(const scene_bvh& bvh,
     bool find_any = false);
 
 // Intersect cone with a bvh
-scene_intersection cone_intersect_scene(const scene_bvh& bvh,
-    const scene_data& scene, const cone_data& cone, bool printing = false,
-    bool find_any = false);
+cone_scene_intersection cone_intersect_scene(const scene_bvh& bvh,
+    const scene_data& scene, const cone_data& cone, int& cone_samples,
+    bool printing = false, bool find_any = false);
 
 // Find a shape element that overlaps a point within a given distance
 // max distance, returning either the closest or any overlap depending on

@@ -275,7 +275,8 @@ void run_render(const render_params& params_) {
     print_info("render sample {}/{}: {}", sample, params.samples,
         elapsed_formatted(sample_timer));
     if (params.savebatch && state.samples % params.batch == 0) {
-      auto image = params.denoise ? get_denoised(state) : get_render(state);
+      auto image       = params.denoise ? get_denoised(state)
+                                        : get_render(state, params);
       auto outfilename = fs::path(params.output)
                              .replace_extension(
                                  "-s" + std::to_string(sample) +
@@ -290,7 +291,7 @@ void run_render(const render_params& params_) {
 
   // save image
   timer      = simple_timer{};
-  auto image = params.denoise ? get_denoised(state) : get_render(state);
+  auto image = params.denoise ? get_denoised(state) : get_render(state, params);
   // for(int pixel=0; pixel<image.pixels.size(); pixel++) {
   //   if(pixel%720>400 && pixel%720<405 && pixel/720>400 && pixel/720<405){
   //     printf("pixel: %f, %f, %f, %f", image.pixels[pixel][0],

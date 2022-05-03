@@ -71,6 +71,9 @@ inline const auto flt_max = std::numeric_limits<float>::max();
 inline const auto flt_min = std::numeric_limits<float>::lowest();
 inline const auto flt_eps = std::numeric_limits<float>::epsilon();
 
+inline const float N_CONE_POINTS    = 5.0;
+inline const float CONE_AREA_FACTOR = 0.2;
+
 inline float abs(float a);
 inline float min(float a, float b);
 inline float max(float a, float b);
@@ -99,7 +102,7 @@ inline void  swap(float& a, float& b);
 inline float smoothstep(float a, float b, float u);
 inline float bias(float a, float bias);
 inline float gain(float a, float gain);
-inline bool equal(float a, float b);
+inline bool  equal(float a, float b);
 
 inline int  abs(int a);
 inline int  min(int a, int b);
@@ -1703,10 +1706,8 @@ inline vec3f gain(const vec3f& a, float b) {
 inline bool isfinite(const vec3f& a) {
   return isfinite(a.x) && isfinite(a.y) && isfinite(a.z);
 }
-inline void swap(vec3f& a, vec3f& b) { std::swap(a, b); }
-inline vec3f projectVector(vec3f a, vec3f b) {
-    return b * dot(a, b);
-}
+inline void  swap(vec3f& a, vec3f& b) { std::swap(a, b); }
+inline vec3f projectVector(vec3f a, vec3f b) { return b * dot(a, b); }
 
 // Vector sequence operations.
 inline int          size(const vec4f& a) { return 4; }

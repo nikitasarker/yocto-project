@@ -139,14 +139,15 @@ bool is_sampler_lit(const trace_params& params);
 
 // Trace state
 struct trace_state {
-  int               width   = 0;
-  int               height  = 0;
-  int               samples = 0;
-  vector<vec4f>     image   = {};
-  vector<vec3f>     albedo  = {};
-  vector<vec3f>     normal  = {};
-  vector<int>       hits    = {};
-  vector<rng_state> rngs    = {};
+  int               width        = 0;
+  int               height       = 0;
+  int               samples      = 0;
+  vector<vec4f>     image        = {};
+  vector<vec3f>     albedo       = {};
+  vector<vec3f>     normal       = {};
+  vector<int>       hits         = {};
+  vector<int>       cone_samples = {};
+  vector<rng_state> rngs         = {};
 };
 
 // Initialize state.
@@ -167,8 +168,10 @@ void trace_sample(trace_state& state, const scene_data& scene,
     const trace_params& params);
 
 // Get resulting render
-image_data get_render(const trace_state& state);
-void       get_render(image_data& render, const trace_state& state);
+image_data get_render(
+    const trace_state& state, const trace_params& params = {});
+void get_render(image_data& render, const trace_state& state,
+    const trace_params& params = {});
 
 // Get denoised result
 image_data get_denoised(const trace_state& state);
