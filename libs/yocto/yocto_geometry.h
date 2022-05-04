@@ -1143,7 +1143,8 @@ inline bool intersect_point(const cone_data& cone, const vec3f& p, float radius,
   vec3f point;
   float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
   phi *= phi;
-  float theta, r;
+  float              theta, r;
+  std::vector<vec2f> uv_vec = {};
 
   for (int i = 1; i <= N_CONE_POINTS; i++) {
     if (i > N_CONE_POINTS) {
@@ -1157,10 +1158,10 @@ inline bool intersect_point(const cone_data& cone, const vec3f& p, float radius,
     point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
                               planeYAxis * coneCircleR * r * sin(theta));
 
-    direction = normalize(point - cone.origin);
+    ray.d     = normalize(point - cone.origin);
     vec2f uv_ = {};
     if (intersect_point(ray, p, r, uv_, t_dist)) {
-      uv.push_back(uv_);
+      uv_vec.push_back(uv_);
 
       if (minDistance > t_dist) {
         minDistance = t_dist;
@@ -1178,6 +1179,7 @@ inline bool intersect_point(const cone_data& cone, const vec3f& p, float radius,
 
   if (t_dist != -1) {
     // intersection occurred: set params and exit
+    uv   = uv_vec;
     dist = t_dist;
     return true;
   }
@@ -1187,7 +1189,8 @@ inline bool intersect_point(const cone_data& cone, const vec3f& p, float radius,
 
 // Intersect a cone with a line (approximate)
 inline bool intersect_line(const cone_data& cone, const vec3f& p0,
-    const vec3f& p1, float r0, float r1, std::vector<vec2f>& uv, float& dist) {
+    const vec3f& p1, float r0, float r1, std::vector<vec2f>& uv, float& dist,
+    bool printing) {
   auto ray = ray3f{cone.origin, cone.dir};
   ray.tmin = cone.tmin;
   ray.tmax = cone.tmax;
@@ -1219,7 +1222,8 @@ inline bool intersect_line(const cone_data& cone, const vec3f& p0,
   vec3f point;
   float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
   phi *= phi;
-  float theta, r;
+  float              theta, r;
+  std::vector<vec2f> uv_vec = {};
 
   for (int i = 1; i <= N_CONE_POINTS; i++) {
     if (i > N_CONE_POINTS) {
@@ -1233,10 +1237,10 @@ inline bool intersect_line(const cone_data& cone, const vec3f& p0,
     point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
                               planeYAxis * coneCircleR * r * sin(theta));
 
-    direction = normalize(point - cone.origin);
+    ray.d     = normalize(point - cone.origin);
     vec2f uv_ = {};
     if (intersect_line(ray, p0, p1, r0, r1, uv_, t_dist)) {
-      uv.push_back(uv_);
+      uv_vec.push_back(uv_);
 
       if (minDistance > t_dist) {
         minDistance = t_dist;
@@ -1254,6 +1258,13 @@ inline bool intersect_line(const cone_data& cone, const vec3f& p0,
 
   if (t_dist != -1) {
     // intersection occurred: set params and exit
+    if (printing) {
+      printf("nPoints: %d\n", nPoints);
+      printf("N_CONE_POINTS: %f\n", N_CONE_POINTS);
+      printf("areaFraction: %f\n", areaFraction);
+      printf("uv vec size: %ld\n", uv_vec.size());
+    }
+    uv   = uv_vec;
     dist = t_dist;
     return true;
   }
@@ -1295,7 +1306,8 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
   vec3f point;
   float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
   phi *= phi;
-  float theta, r;
+  float              theta, r;
+  std::vector<vec2f> uv_vec = {};
 
   for (int i = 1; i <= N_CONE_POINTS; i++) {
     if (i > N_CONE_POINTS) {
@@ -1309,11 +1321,11 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
     point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
                               planeYAxis * coneCircleR * r * sin(theta));
 
-    direction = normalize(point - cone.origin);
+    ray.d     = normalize(point - cone.origin);
     vec2f uv_ = {};
     if (intersect_cylinder(ray, p0, p1, r0, r1, uv_, t_dist)) {
       // if (intersect_line(ray, p0, p1, r0, r1, uv_, t_dist)) {
-      uv.push_back(uv_);
+      uv_vec.push_back(uv_);
 
       if (minDistance > t_dist) {
         minDistance = t_dist;
@@ -1331,6 +1343,7 @@ inline bool intersect_cylinder(const cone_data& cone, const vec3f& p0,
 
   if (t_dist != -1) {
     // intersection occurred: set params and exit
+    uv   = uv_vec;
     dist = t_dist;
     return true;
   }
@@ -1372,7 +1385,8 @@ inline bool intersect_triangle(const cone_data& cone, const vec3f& p0,
   vec3f point;
   float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
   phi *= phi;
-  float theta, r;
+  float              theta, r;
+  std::vector<vec2f> uv_vec = {};
 
   for (int i = 1; i <= N_CONE_POINTS; i++) {
     if (i > N_CONE_POINTS) {
@@ -1386,10 +1400,10 @@ inline bool intersect_triangle(const cone_data& cone, const vec3f& p0,
     point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
                               planeYAxis * coneCircleR * r * sin(theta));
 
-    direction = normalize(point - cone.origin);
+    ray.d     = normalize(point - cone.origin);
     vec2f uv_ = {};
     if (intersect_triangle(ray, p0, p1, p2, uv_, t_dist)) {
-      uv.push_back(uv_);
+      uv_vec.push_back(uv_);
 
       if (minDistance > t_dist) {
         minDistance = t_dist;
@@ -1407,6 +1421,7 @@ inline bool intersect_triangle(const cone_data& cone, const vec3f& p0,
 
   if (t_dist != -1) {
     // intersection occurred: set params and exit
+    uv   = uv_vec;
     dist = t_dist;
     return true;
   }
@@ -1449,7 +1464,8 @@ inline bool intersect_quad(const cone_data& cone, const vec3f& p0,
   vec3f point;
   float phi = (sqrtf(5.0f) + 1.0f) * 0.5f;
   phi *= phi;
-  float theta, r;
+  float              theta, r;
+  std::vector<vec2f> uv_vec = {};
 
   for (int i = 1; i <= N_CONE_POINTS; i++) {
     if (i > N_CONE_POINTS) {
@@ -1463,11 +1479,11 @@ inline bool intersect_quad(const cone_data& cone, const vec3f& p0,
     point = coneCircleV + (planeXAxis * coneCircleR * r * cos(theta) +
                               planeYAxis * coneCircleR * r * sin(theta));
 
-    direction = normalize(point - cone.origin);
+    ray.d     = normalize(point - cone.origin);
     vec2f uv_ = {};
-    if (intersect_quad(ray, p0, p1, p2, p3, uv_, t_dist)) {
-      uv.push_back(uv_);
 
+    if (intersect_quad(ray, p0, p1, p2, p3, uv_, t_dist)) {
+      uv_vec.push_back(uv_);
       if (minDistance > t_dist) {
         minDistance = t_dist;
       }
@@ -1484,6 +1500,7 @@ inline bool intersect_quad(const cone_data& cone, const vec3f& p0,
 
   if (t_dist != -1) {
     // intersection occurred: set params and exit
+    uv   = uv_vec;
     dist = t_dist;
     return true;
   }

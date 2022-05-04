@@ -366,6 +366,10 @@ static cone_data sample_camera_cone(const camera_data& camera, const vec2i& ij,
 
   // get cone spread
   float spread = abs(atan(0.5f * pixel_size / dist));
+  if (printing) {
+    printf("calculated spread: %f\n", spread);
+  }
+  spread = spread * 0.1f;
 
   return {ray.o, ray.d, spread};
 }
@@ -470,6 +474,7 @@ struct cone_trace_result {
 static trace_result trace_path(const scene_data& scene, const scene_bvh& bvh,
     const trace_lights& lights, const ray3f& ray_, rng_state& rng,
     const trace_params& params, bool printing) {
+  if (printing) printf("\n=== new pixel\n");
   // initialize
   auto radiance      = vec3f{0, 0, 0};
   auto weight        = vec3f{1, 1, 1};
@@ -1363,6 +1368,7 @@ static cone_trace_result cone_trace_path(const scene_data& scene,
     const scene_bvh& bvh, const trace_lights& lights, const cone_data& cone,
     rng_state& rng, const trace_params& params, int& cone_samples,
     bool printing) {
+  if (printing) printf("\n=== new pixel\n");
   // return multiple trace results? trace result array, cone_trace_result :)
   cone_trace_result cone_result = {};
 
@@ -1372,6 +1378,11 @@ static cone_trace_result cone_trace_path(const scene_data& scene,
 
   // update cone samples
   cone_samples = cone_intersection.uv.size();
+  if (printing) {
+    // if (cone_samples != 5) {
+    printf("cone samples: %d\n", cone_samples);
+    // }
+  }
 
   // for each cone intersection, trace path
   for (auto uv : cone_intersection.uv) {
@@ -1532,300 +1543,6 @@ static cone_trace_result cone_trace_path(const scene_data& scene,
   return cone_result;
 }
 
-static trace_result cone_trace_path2(const scene_data& scene,
-    const scene_bvh& bvh, const trace_lights& lights, const cone_data& cone,
-    rng_state& rng, const trace_params& params, int& cone_samples,
-    bool printing) {
-  auto radiance      = vec3f{0, 0, 0};
-  auto weight        = vec3f{1, 1, 1};
-  auto ray           = ray3f{cone.origin, cone.dir};
-  auto volume_stack  = vector<material_point>{};
-  auto max_roughness = 0.0f;
-  auto hit           = false;
-  auto hit_albedo    = vec3f{0, 0, 0};
-  auto hit_normal    = vec3f{0, 0, 0};
-  auto next_emission = true;
-  auto opbounce      = 0;
-
-  scene_intersection      intersection      = {};
-  cone_scene_intersection cone_intersection = {};
-
-  // trace  path
-  for (auto bounce = 0; bounce < params.bounces; bounce++) {
-    // intersect next point
-    if (bounce == 0) {  // do cone intersection for first one
-      cone_intersection = cone_intersect_scene(
-          bvh, scene, cone, cone_samples, printing);
-      cone_samples += cone_intersection.uv.size();
-      for (auto uv : cone_intersection.uv) {
-        intersection.instance = cone_intersection.instance;
-        intersection.element  = cone_intersection.element;
-        intersection.uv       = uv;
-        intersection.distance = cone_intersection.distance;
-        intersection.hit      = cone_intersection.hit;
-        if (!intersection.hit) {
-          if (printing) {
-            printf("no hit\n");
-          }
-          if ((bounce > 0 || !params.envhidden) && next_emission) {
-            radiance += weight * eval_environment(scene, cone.dir);
-          }
-          return {radiance, hit, hit_albedo, hit_normal};
-        }
-
-        // handle transmission if inside a volume
-        auto in_volume = false;
-        if (!volume_stack.empty()) {
-          auto& vsdf     = volume_stack.back();
-          auto  distance = sample_transmittance(
-               vsdf.density, intersection.distance, rand1f(rng), rand1f(rng));
-          weight *= eval_transmittance(vsdf.density, distance) /
-                    sample_transmittance_pdf(
-                        vsdf.density, distance, intersection.distance);
-          in_volume             = distance < intersection.distance;
-          intersection.distance = distance;
-        }
-
-        // switch between surface and volume
-        if (!in_volume) {
-          // prepare shading point
-          auto outgoing = -ray.d;
-          auto position = eval_shading_position(scene, intersection, outgoing);
-          auto normal   = eval_shading_normal(scene, intersection, outgoing);
-          auto material = eval_material(scene, intersection);
-
-          // correct roughness
-          if (params.nocaustics) {
-            max_roughness      = max(material.roughness, max_roughness);
-            material.roughness = max_roughness;
-          }
-
-          // handle opacity
-          if (material.opacity < 1 && rand1f(rng) >= material.opacity) {
-            if (opbounce++ > 128) break;
-            ray = {position + ray.d * 1e-2f, ray.d};
-            bounce -= 1;
-            continue;
-          }
-
-          // set hit variables
-          if (bounce == 0) {
-            hit        = true;
-            hit_albedo = material.color;
-            hit_normal = normal;
-          }
-
-          // accumulate emission
-          radiance += weight * eval_emission(material, normal, outgoing);
-          if (printing) {
-            printf("acc emiss radiance: %f, %f, %f\n", radiance.x, radiance.y,
-                radiance.z);
-          }
-
-          // next direction
-          auto incoming = vec3f{0, 0, 0};
-          if (!is_delta(material)) {
-            if (rand1f(rng) < 0.5f) {
-              incoming = sample_bsdfcos(
-                  material, normal, outgoing, rand1f(rng), rand2f(rng));
-            } else {
-              incoming = sample_lights(scene, lights, position, rand1f(rng),
-                  rand1f(rng), rand2f(rng));
-            }
-            if (incoming == vec3f{0, 0, 0}) break;
-            weight *= eval_bsdfcos(material, normal, outgoing, incoming) /
-                      (0.5f * sample_bsdfcos_pdf(
-                                  material, normal, outgoing, incoming) +
-                          0.5f * sample_lights_pdf(
-                                     scene, bvh, lights, position, incoming));
-          } else {
-            incoming = sample_delta(material, normal, outgoing, rand1f(rng));
-            weight *= eval_delta(material, normal, outgoing, incoming) /
-                      sample_delta_pdf(material, normal, outgoing, incoming);
-          }
-
-          // update volume stack
-          if (is_volumetric(scene, intersection) &&
-              dot(normal, outgoing) * dot(normal, incoming) < 0) {
-            if (volume_stack.empty()) {
-              auto material = eval_material(scene, intersection);
-              volume_stack.push_back(material);
-            } else {
-              volume_stack.pop_back();
-            }
-          }
-
-          // setup next iteration
-          ray = {position, incoming};
-        } else {
-          // prepare shading point
-          auto  outgoing = -ray.d;
-          auto  position = ray.o + ray.d * cone_intersection.distance;
-          auto& vsdf     = volume_stack.back();
-
-          // accumulate emission
-          // radiance += weight * eval_volemission(emission, outgoing);
-
-          // next direction
-          auto incoming = vec3f{0, 0, 0};
-          if (rand1f(rng) < 0.5f) {
-            incoming = sample_scattering(
-                vsdf, outgoing, rand1f(rng), rand2f(rng));
-          } else {
-            incoming = sample_lights(
-                scene, lights, position, rand1f(rng), rand1f(rng), rand2f(rng));
-          }
-          if (incoming == vec3f{0, 0, 0}) break;
-          weight *= eval_scattering(vsdf, outgoing, incoming) /
-                    (0.5f * sample_scattering_pdf(vsdf, outgoing, incoming) +
-                        0.5f * sample_lights_pdf(
-                                   scene, bvh, lights, position, incoming));
-
-          // setup next iteration
-          ray = {position, incoming};
-        }
-
-        // check weight
-        if (weight == vec3f{0, 0, 0} || !isfinite(weight)) break;
-
-        // russian roulette
-        if (bounce > 3) {
-          auto rr_prob = min((float)0.99, max(weight));
-          if (rand1f(rng) >= rr_prob) break;
-          weight *= 1 / rr_prob;
-        }
-      }
-    } else {
-      intersection = intersect_scene(bvh, scene, ray);
-
-      if (!intersection.hit) {
-        if ((bounce > 0 || !params.envhidden) && next_emission)
-          radiance += weight * eval_environment(scene, ray.d);
-        break;
-      }
-
-      // handle transmission if inside a volume
-      auto in_volume = false;
-      if (!volume_stack.empty()) {
-        auto& vsdf     = volume_stack.back();
-        auto  distance = sample_transmittance(
-             vsdf.density, intersection.distance, rand1f(rng), rand1f(rng));
-        weight *= eval_transmittance(vsdf.density, distance) /
-                  sample_transmittance_pdf(
-                      vsdf.density, distance, intersection.distance);
-        in_volume             = distance < intersection.distance;
-        intersection.distance = distance;
-      }
-
-      // switch between surface and volume
-      if (!in_volume) {
-        // prepare shading point
-        auto outgoing = -ray.d;
-        auto position = eval_shading_position(scene, intersection, outgoing);
-        auto normal   = eval_shading_normal(scene, intersection, outgoing);
-        auto material = eval_material(scene, intersection);
-
-        // correct roughness
-        if (params.nocaustics) {
-          max_roughness      = max(material.roughness, max_roughness);
-          material.roughness = max_roughness;
-        }
-
-        // handle opacity
-        if (material.opacity < 1 && rand1f(rng) >= material.opacity) {
-          if (opbounce++ > 128) break;
-          ray = {position + ray.d * 1e-2f, ray.d};
-          bounce -= 1;
-          continue;
-        }
-
-        // set hit variables
-        if (bounce == 0) {
-          hit        = true;
-          hit_albedo = material.color;
-          hit_normal = normal;
-        }
-
-        // accumulate emission
-        radiance += weight * eval_emission(material, normal, outgoing);
-
-        // next direction
-        auto incoming = vec3f{0, 0, 0};
-        if (!is_delta(material)) {
-          if (rand1f(rng) < 0.5f) {
-            incoming = sample_bsdfcos(
-                material, normal, outgoing, rand1f(rng), rand2f(rng));
-          } else {
-            incoming = sample_lights(
-                scene, lights, position, rand1f(rng), rand1f(rng), rand2f(rng));
-          }
-          if (incoming == vec3f{0, 0, 0}) break;
-          weight *=
-              eval_bsdfcos(material, normal, outgoing, incoming) /
-              (0.5f * sample_bsdfcos_pdf(material, normal, outgoing, incoming) +
-                  0.5f * sample_lights_pdf(
-                             scene, bvh, lights, position, incoming));
-        } else {
-          incoming = sample_delta(material, normal, outgoing, rand1f(rng));
-          weight *= eval_delta(material, normal, outgoing, incoming) /
-                    sample_delta_pdf(material, normal, outgoing, incoming);
-        }
-
-        // update volume stack
-        if (is_volumetric(scene, intersection) &&
-            dot(normal, outgoing) * dot(normal, incoming) < 0) {
-          if (volume_stack.empty()) {
-            auto material = eval_material(scene, intersection);
-            volume_stack.push_back(material);
-          } else {
-            volume_stack.pop_back();
-          }
-        }
-
-        // setup next iteration
-        ray = {position, incoming};
-      } else {
-        // prepare shading point
-        auto  outgoing = -ray.d;
-        auto  position = ray.o + ray.d * intersection.distance;
-        auto& vsdf     = volume_stack.back();
-
-        // accumulate emission
-        // radiance += weight * eval_volemission(emission, outgoing);
-
-        // next direction
-        auto incoming = vec3f{0, 0, 0};
-        if (rand1f(rng) < 0.5f) {
-          incoming = sample_scattering(
-              vsdf, outgoing, rand1f(rng), rand2f(rng));
-        } else {
-          incoming = sample_lights(
-              scene, lights, position, rand1f(rng), rand1f(rng), rand2f(rng));
-        }
-        if (incoming == vec3f{0, 0, 0}) break;
-        weight *= eval_scattering(vsdf, outgoing, incoming) /
-                  (0.5f * sample_scattering_pdf(vsdf, outgoing, incoming) +
-                      0.5f * sample_lights_pdf(
-                                 scene, bvh, lights, position, incoming));
-
-        // setup next iteration
-        ray = {position, incoming};
-      }
-
-      // check weight
-      if (weight == vec3f{0, 0, 0} || !isfinite(weight)) break;
-
-      // russian roulette
-      if (bounce > 3) {
-        auto rr_prob = min((float)0.99, max(weight));
-        if (rand1f(rng) >= rr_prob) break;
-        weight *= 1 / rr_prob;
-      }
-    }
-  }
-  return {radiance, hit, hit_albedo, hit_normal};
-}
-
 // Trace a single ray from the camera using the given algorithm.
 using sampler_func = trace_result (*)(const scene_data& scene,
     const scene_bvh& bvh, const trace_lights& lights, const ray3f& ray,
@@ -1890,18 +1607,14 @@ void trace_sample(trace_state& state, const scene_data& scene,
   auto  idx    = state.width * j + i;
 
   bool printing = false;
-  // if (idx % 720 > 500 && idx % 720 < 505 && idx / 720 > 170 &&
-  //     idx / 720 < 175) {
-  if (idx % 720 > 600 && idx % 720 < 605 && idx / 720 > 350 &&
-      idx / 720 < 355) {
+  if (idx % 720 > 450 && idx % 720 < 453 && idx / 720 > 270 &&
+      idx / 720 < 273) {  // rabbit
     printing = true;
   }
   if (params.sampler == trace_sampler_type::cone) {
     auto cone_sampler = get_cone_trace_sampler_func(params);
     auto cone = sample_camera_cone(camera, {i, j}, {state.width, state.height},
         rand2f(state.rngs[idx]), rand2f(state.rngs[idx]), printing);
-    // auto [radiance, hit, albedo, normal] = cone_sampler(scene, bvh, lights,
-    //     cone, state.rngs[idx], params, state.cone_samples[idx], printing);
     auto samples = cone_sampler(scene, bvh, lights, cone, state.rngs[idx],
         params, state.cone_samples[idx], printing);
     for (auto sample : samples.result) {
@@ -1916,14 +1629,15 @@ void trace_sample(trace_state& state, const scene_data& scene,
 
       if (sample.hit) {
         // if (printing) {
-        //   printf("radiance: %f, %f, %f\n", radiance.x, radiance.y,
-        //   radiance.z); printf("albedo: %f, %f, %f\n", albedo.x, albedo.y,
-        //   albedo.z); printf("normal: %f, %f, %f\n", normal.x, normal.y,
-        //   normal.z);
+        //   printf("\n====cone====\n");
+        //   printf("radiance: %f, %f, %f\n", sample.radiance.x,
+        //   sample.radiance.y,
+        //       sample.radiance.z);
+        //   printf("albedo: %f, %f, %f\n", sample.albedo.x, sample.albedo.y,
+        //       sample.albedo.z);
+        //   printf("normal: %f, %f, %f\n", sample.normal.x, sample.normal.y,
+        //       sample.normal.z);
         // }
-        // state.image[idx] += {radiance.x, radiance.y, radiance.z, 1};
-        // state.albedo[idx] += albedo;
-        // state.normal[idx] += normal;
         state.image[idx] += {
             sample.radiance.x, sample.radiance.y, sample.radiance.z, 1};
         state.albedo[idx] += {
@@ -1932,7 +1646,6 @@ void trace_sample(trace_state& state, const scene_data& scene,
             sample.normal.x, sample.normal.y, sample.normal.z};
         state.hits[idx] += 1;  // idk what here
       } else if (!params.envhidden && !scene.environments.empty()) {
-        // state.image[idx] += {radiance.x, radiance.y, radiance.z, 1};
         state.image[idx] += {
             sample.radiance.x, sample.radiance.y, sample.radiance.z, 1};
         state.albedo[idx] += {1, 1, 1};
@@ -1940,17 +1653,6 @@ void trace_sample(trace_state& state, const scene_data& scene,
         state.hits[idx] += 1;
       }
     }
-    // if (printing) {
-    //   printf("samples size: %ld\n", samples.result.size());
-    //   for (auto samp : samples.result) {
-    //     printf("radiance after cone sampler: %f, %f, %f\n", samp.radiance.x,
-    //         samp.radiance.y, samp.radiance.z);
-    //     printf(
-    //         "cone samples after cone_sampler: %d\n",
-    //         state.cone_samples[idx]);
-    //   }
-    // }
-
   } else {
     auto sampler = get_trace_sampler_func(params);
     auto ray     = sample_camera(camera, {i, j}, {state.width, state.height},
@@ -1966,6 +1668,7 @@ void trace_sample(trace_state& state, const scene_data& scene,
     }
     if (hit) {
       // if (printing) {
+      //   printf("\n====path====\n");
       //   printf("radiance: %f, %f, %f\n", radiance.x, radiance.y, radiance.z);
       //   printf("albedo: %f, %f, %f\n", albedo.x, albedo.y, albedo.z);
       //   printf("normal: %f, %f, %f\n", normal.x, normal.y, normal.z);
@@ -1980,9 +1683,6 @@ void trace_sample(trace_state& state, const scene_data& scene,
       state.normal[idx] += -ray.d;
       state.hits[idx] += 1;
     }
-  }
-  if (printing) {
-    state.image[idx] += {255, 0, 0, 1};
   }
 }
 
@@ -2102,13 +1802,6 @@ void trace_samples(trace_state& state, const scene_data& scene,
     });
   }
   state.samples += 1;
-  // for(int idx=0; idx<state.image.size(); idx++) {
-  //   if(idx%720>300 && idx%720<305 && idx/720>300 && idx/720<305) {
-  //     // printf("=======\n");
-  //     printf("image in trace_samples: %f, %f, %f\n", state.image[idx][0],
-  //     state.image[idx][1], state.image[idx][2]);
-  //   }
-  // }
 }
 
 // Check image type
@@ -2132,30 +1825,25 @@ void get_render(
   check_image(image, state.width, state.height, true);
   float scale = 1.0f / (float)state.samples;
   if (params.sampler == trace_sampler_type::cone) {
-    // TODO correct this later
-    // scale = 1.0f / (float)state.cone_samples;
-    // scale = 1.0f / (float)state.samples * 5.0f;
     for (auto idx = 0; idx < state.width * state.height; idx++) {
       image.pixels[idx] = state.image[idx] * scale *
                           (1.0f / (float)state.cone_samples[idx]);
-      // image.pixels[idx] = state.image[idx] * scale;
-      // here
-      if (idx % 720 > 600 && idx % 720 < 605 && idx / 720 > 350 &&
-          idx / 720 < 355) {
-        // if (idx % 720 > 300 && idx % 720 < 305 && idx / 720 > 300 &&
-        //     idx / 720 < 305) { // rabbit
-        // printf("state.image[idx]: %f, %f, %f, %f\n", state.image[idx][0],
-        //     state.image[idx][1], state.image[idx][2], state.image[idx][3]);
-        // printf("pixel: %f, %f, %f, %f\n", image.pixels[idx][0],
-        //     image.pixels[idx][1], image.pixels[idx][2],
-        //     image.pixels[idx][3]);
-        image.pixels[idx] = vec4f{255, 255, 255, 1};
-        // image.pixels[idx] = vec4f{0, 0, 0, 1};
-      }
     }
   } else {
     for (auto idx = 0; idx < state.width * state.height; idx++) {
       image.pixels[idx] = state.image[idx] * scale;
+    }
+  }
+  // debug
+  for (auto idx = 0; idx < state.width * state.height; idx++) {
+    if (idx % 720 > 450 && idx % 720 < 453 && idx / 720 > 270 &&
+        idx / 720 < 273) {  // rabbit
+      // printf("state.image[idx]: %f, %f, %f, %f\n", state.image[idx][0],
+      //     state.image[idx][1], state.image[idx][2], state.image[idx][3]);
+      printf("pixel: %f, %f, %f, %f\n", image.pixels[idx][0],
+          image.pixels[idx][1], image.pixels[idx][2], image.pixels[idx][3]);
+      image.pixels[idx] = vec4f{255, 255, 255, 1};
+      // image.pixels[idx] = vec4f{0, 0, 0, 1};
     }
   }
 }

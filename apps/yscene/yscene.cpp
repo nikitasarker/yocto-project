@@ -292,13 +292,6 @@ void run_render(const render_params& params_) {
   // save image
   timer      = simple_timer{};
   auto image = params.denoise ? get_denoised(state) : get_render(state, params);
-  // for(int pixel=0; pixel<image.pixels.size(); pixel++) {
-  //   if(pixel%720>400 && pixel%720<405 && pixel/720>400 && pixel/720<405){
-  //     printf("pixel: %f, %f, %f, %f", image.pixels[pixel][0],
-  //     image.pixels[pixel][1], image.pixels[pixel][2],
-  //     image.pixels[pixel][3]);
-  //   }
-  // }
 
   if (!is_hdr_filename(params.output))
     image = tonemap_image(image, params.exposure, params.filmic);

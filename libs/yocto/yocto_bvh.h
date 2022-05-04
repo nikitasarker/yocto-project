@@ -128,8 +128,10 @@ struct scene_intersection {
 
 // array of scene intersections for cone tracing
 struct cone_scene_intersection {
-  int           instance = -1;
-  int           element  = -1;
+  int instance = -1;
+  int element  = -1;
+  // vector<int>   instance = -1;
+  // vector<int>   element  = -1;
   vector<vec2f> uv       = {};
   float         distance = 0;
   bool          hit      = false;
