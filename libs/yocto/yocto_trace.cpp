@@ -369,7 +369,7 @@ static cone_data sample_camera_cone(const camera_data& camera, const vec2i& ij,
   if (printing) {
     printf("calculated spread: %f\n", spread);
   }
-  spread = spread * 0.1f;
+  spread = spread * 0.01f;
 
   return {ray.o, ray.d, spread};
 }
@@ -1607,10 +1607,10 @@ void trace_sample(trace_state& state, const scene_data& scene,
   auto  idx    = state.width * j + i;
 
   bool printing = false;
-  if (idx % 720 > 450 && idx % 720 < 453 && idx / 720 > 270 &&
-      idx / 720 < 273) {  // rabbit
-    printing = true;
-  }
+  // if (idx % 720 > 450 && idx % 720 < 453 && idx / 720 > 270 &&
+  //     idx / 720 < 273) {  // rabbit
+  //   printing = true;
+  // }
   if (params.sampler == trace_sampler_type::cone) {
     auto cone_sampler = get_cone_trace_sampler_func(params);
     auto cone = sample_camera_cone(camera, {i, j}, {state.width, state.height},
